@@ -369,6 +369,19 @@
     }
 }
 
+-(void)createIframeBridge
+{
+    if (!_injectedIframeBridge) {
+        _injectedIframeBridge = YES;
+        // Create an iframe bridge in the new document to communicate with the CDVThemeableBrowserViewController
+        NSString* jsIframeBridge = @"var e = _cdvIframeBridge = d.createElement('iframe');e.style.display='none';d.body.appendChild(e);";
+        // Add the postMessage API
+        NSString* jspostMessageApi = @"window.webkit={messageHandlers:{cordova_iab:{postMessage:function(message){_cdvIframeBridge.src='gap-iab://message/'+encodeURIComponent(message);}}}}";
+        // Inject the JS to the webview
+        [self.themeableBrowserViewController.webView stringByEvaluatingJavaScriptFromString:[NSString stringWithFormat:@"(function(d){%@%@})(document)", jsIframeBridge, jspostMessageApi]];
+    }
+}
+
 // This is a helper method for the inject{Script|Style}{Code|File} API calls, which
 // provides a consistent method for injecting JavaScript code into the document.
 //
@@ -380,12 +393,6 @@
 
 - (void)injectDeferredObject:(NSString*)source withWrapper:(NSString*)jsWrapper
 {
-    if (!_injectedIframeBridge) {
-        _injectedIframeBridge = YES;
-        // Create an iframe bridge in the new document to communicate with the CDVThemeableBrowserViewController
-        [self.themeableBrowserViewController.webView stringByEvaluatingJavaScriptFromString:@"(function(d){var e = _cdvIframeBridge = d.createElement('iframe');e.style.display='none';d.body.appendChild(e);})(document)"];
-    }
-    
     if (jsWrapper != nil) {
         NSData* jsonData = [NSJSONSerialization dataWithJSONObject:@[source] options:0 error:nil];
         NSString* sourceArrayString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
@@ -506,6 +513,22 @@
             }
             [self.commandDelegate sendPluginResult:pluginResult callbackId:scriptCallbackId];
             return NO;
+        }else if ([scriptCallbackId isEqualToString:@"message"] && (self.callbackId != nil)) {
+            // Send a message event            
+            NSString* scriptResult = [url path];
+            if ((scriptResult != nil) && ([scriptResult length] > 1)) {
+                scriptResult = [scriptResult substringFromIndex:1];
+                NSError* __autoreleasing error = nil;
+                NSData* decodedResult = [NSJSONSerialization JSONObjectWithData:[scriptResult dataUsingEncoding:NSUTF8StringEncoding] options:kNilOptions error:&error];
+                if (error == nil) {
+                    NSMutableDictionary* dResult = [NSMutableDictionary new];
+                    [dResult setValue:@"message" forKey:@"type"];
+                    [dResult setObject:decodedResult forKey:@"data"];
+                    CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:dResult];
+                    [pluginResult setKeepCallback:[NSNumber numberWithBool:YES]];            
+                    [self.commandDelegate sendPluginResult:pluginResult callbackId:self.callbackId];
+                }
+            }
         }
     } else if ([self isSystemUrl:url]) {
         // Do not allow iTunes store links from ThemeableBrowser as they do not work
@@ -561,6 +584,7 @@
 
 - (void)webViewDidFinishLoad:(UIWebView*)theWebView
 {
+    [self createIframeBridge];
     if (self.callbackId != nil) {
         // TODO: It would be more useful to return the URL the page is actually on (e.g. if it's been redirected).
         NSString* url = [self.themeableBrowserViewController.currentURL absoluteString];
@@ -1167,6 +1191,7 @@
 - (void)viewDidUnload
 {
     [self.webView loadHTMLString:nil baseURL:nil];
+    self.webView.delegate = nil;
     [CDVUserAgentUtil releaseLock:&_userAgentLockToken];
     [super viewDidUnload];
 }
@@ -1182,6 +1207,7 @@
     
     [CDVUserAgentUtil releaseLock:&_userAgentLockToken];
     self.currentURL = nil;
+    self.webView.delegate = nil;
     
     if ((self.navigationDelegate != nil) && [self.navigationDelegate respondsToSelector:@selector(browserExit)]) {
         [self.navigationDelegate browserExit];
