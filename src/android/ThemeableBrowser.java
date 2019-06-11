@@ -630,7 +630,7 @@ public class ThemeableBrowser extends CordovaPlugin {
                 // Back button
                 final Button back = createButton(
                     features.backButton,
-                    "back button",
+                        "back button" ,
                     new View.OnClickListener() {
                         public void onClick(View v) {
                             emitButtonEvent(
@@ -653,7 +653,7 @@ public class ThemeableBrowser extends CordovaPlugin {
                 // Forward button
                 final Button forward = createButton(
                     features.forwardButton,
-                    "forward button",
+                    "forward button" ,
                     new View.OnClickListener() {
                         public void onClick(View v) {
                             emitButtonEvent(
@@ -673,7 +673,7 @@ public class ThemeableBrowser extends CordovaPlugin {
                 // Close/Done button
                 Button close = createButton(
                     features.closeButton,
-                    "close button",
+                    "close button" ,
                     new View.OnClickListener() {
                         public void onClick(View v) {
                             emitButtonEvent(
@@ -684,13 +684,19 @@ public class ThemeableBrowser extends CordovaPlugin {
                     }
                 );
 
+
                 // Menu button
                 Spinner menu = features.menu != null
                         ? new MenuSpinner(cordova.getActivity()) : null;
                 if (menu != null) {
                     menu.setLayoutParams(new LinearLayout.LayoutParams(
                             LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
-                    menu.setContentDescription("menu button");
+
+                    if(features.menu.accessibilityDescription != null){
+                        menu.setContentDescription(features.menu.accessibilityDescription);
+                    }else{
+                        menu.setContentDescription("menu button");
+                    }
                     setButtonImages(menu, features.menu, DISABLED_ALPHA);
 
                     // We are not allowed to use onClickListener for Spinner, so we will use
@@ -745,6 +751,7 @@ public class ThemeableBrowser extends CordovaPlugin {
                         );
                     }
                 }
+
 
                 // Title
                 final TextView title = features.title != null
@@ -1213,12 +1220,12 @@ public class ThemeableBrowser extends CordovaPlugin {
         }
     }
 
-    private Button createButton(BrowserButton buttonProps, String description,
+    private Button createButton(BrowserButton buttonProps, String defaultDescription,
             View.OnClickListener listener) {
         Button result = null;
         if (buttonProps != null) {
             result = new Button(cordova.getActivity());
-            result.setContentDescription(description);
+            result.setContentDescription(buttonProps.accessibilityDescription != null ? buttonProps.accessibilityDescription : defaultDescription);
             result.setLayoutParams(new LinearLayout.LayoutParams(
                     LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
             setButtonImages(result, buttonProps, DISABLED_ALPHA);
@@ -1228,7 +1235,7 @@ public class ThemeableBrowser extends CordovaPlugin {
         } else {
             emitWarning(WRN_UNDEFINED,
                     String.format("%s is not defined. Button will not be shown.",
-                            description));
+                            defaultDescription));
         }
         return result;
     }
@@ -1546,6 +1553,7 @@ public class ThemeableBrowser extends CordovaPlugin {
         public String wwwImagePressed;
         public double wwwImageDensity = 1;
         public String align = ALIGN_LEFT;
+        public String accessibilityDescription;
     }
 
     private static class BrowserMenu extends BrowserButton {
