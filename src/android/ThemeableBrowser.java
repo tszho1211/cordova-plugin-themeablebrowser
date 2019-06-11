@@ -81,6 +81,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.Arrays;
 
 @SuppressLint("SetJavaScriptEnabled")
 public class ThemeableBrowser extends CordovaPlugin {
@@ -707,6 +708,13 @@ public class ThemeableBrowser extends CordovaPlugin {
                     });
 
                     if (features.menu.items != null) {
+                        if (features.menu.cancel != null) {
+                            EventLabel cancelEventLabel = new EventLabel();
+                            cancelEventLabel.label = features.menu.cancel;
+                            cancelEventLabel.event = "cancel";
+                            features.menu.items = ArrayHelper.push(features.menu.items, cancelEventLabel);
+                        }
+
                         HideSelectedAdapter<EventLabel> adapter
                                 = new HideSelectedAdapter<EventLabel>(
                                 cordova.getActivity(),
@@ -1542,6 +1550,7 @@ public class ThemeableBrowser extends CordovaPlugin {
 
     private static class BrowserMenu extends BrowserButton {
         public EventLabel[] items;
+        public String cancel;
     }
 
     private static class Toolbar {
@@ -1556,5 +1565,18 @@ public class ThemeableBrowser extends CordovaPlugin {
         public String color;
         public String staticText;
         public boolean showPageTitle;
+    }
+
+    public static class ArrayHelper {
+        public static <T> T[] push(T[] arr, T item) {
+            T[] tmp = Arrays.copyOf(arr, arr.length + 1);
+            tmp[tmp.length - 1] = item;
+            return tmp;
+        }
+
+        public static <T> T[] pop(T[] arr) {
+            T[] tmp = Arrays.copyOf(arr, arr.length - 1);
+            return tmp;
+        }
     }
 }
