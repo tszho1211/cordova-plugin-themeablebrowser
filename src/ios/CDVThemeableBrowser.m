@@ -46,6 +46,7 @@
 #define    kThemeableBrowserPropTitle @"title"
 #define    kThemeableBrowserPropCancel @"cancel"
 #define    kThemeableBrowserPropItems @"items"
+#define    kThemeableBrowserPropAccessibilityDescription @"accessibilityDescription"
 
 #define    kThemeableBrowserEmitError @"ThemeableBrowserError"
 #define    kThemeableBrowserEmitWarning @"ThemeableBrowserWarning"
@@ -514,7 +515,7 @@
             [self.commandDelegate sendPluginResult:pluginResult callbackId:scriptCallbackId];
             return NO;
         }else if ([scriptCallbackId isEqualToString:@"message"] && (self.callbackId != nil)) {
-            // Send a message event            
+            // Send a message event
             NSString* scriptResult = [url path];
             if ((scriptResult != nil) && ([scriptResult length] > 1)) {
                 scriptResult = [scriptResult substringFromIndex:1];
@@ -525,7 +526,7 @@
                     [dResult setValue:@"message" forKey:@"type"];
                     [dResult setObject:decodedResult forKey:@"data"];
                     CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:dResult];
-                    [pluginResult setKeepCallback:[NSNumber numberWithBool:YES]];            
+                    [pluginResult setKeepCallback:[NSNumber numberWithBool:YES]];
                     [self.commandDelegate sendPluginResult:pluginResult callbackId:self.callbackId];
                 }
             }
@@ -756,7 +757,8 @@
     if (toolbarProps[kThemeableBrowserPropImage] || toolbarProps[kThemeableBrowserPropWwwImage]) {
         UIImage *image = [self getImage:toolbarProps[kThemeableBrowserPropImage]
                                 altPath:toolbarProps[kThemeableBrowserPropWwwImage]
-                             altDensity:[toolbarProps[kThemeableBrowserPropWwwImageDensity] doubleValue]];
+                             altDensity:[toolbarProps[kThemeableBrowserPropWwwImageDensity] doubleValue]
+               accessibilityDescription:@""];
         
         if (image) {
             self.toolbar.backgroundColor = [UIColor colorWithPatternImage:image];
@@ -934,7 +936,7 @@
  * bundle, we can't tell what densitiy the image is supposed to be so it needs to be given
  * explicitly.
  */
-- (UIImage*) getImage:(NSString*) name altPath:(NSString*) altPath altDensity:(CGFloat) altDensity
+- (UIImage*) getImage:(NSString*) name altPath:(NSString*) altPath altDensity:(CGFloat) altDensity accessibilityDescription:(NSString*) accessibilityDescription
 {
     UIImage* result = nil;
     if (name) {
@@ -947,6 +949,8 @@
         }
         NSData* data = [NSData dataWithContentsOfFile:path];
         result = [UIImage imageWithData:data scale:altDensity];
+        result.accessibilityLabel = accessibilityDescription;
+        result.isAccessibilityElement = true;
     }
     
     return result;
@@ -957,10 +961,16 @@
     UIButton* result = nil;
     if (buttonProps) {
         UIImage *buttonImage = nil;
+        NSString* accessibilityDescription = description;
+        if(buttonProps[kThemeableBrowserPropAccessibilityDescription]){
+            accessibilityDescription = buttonProps[kThemeableBrowserPropAccessibilityDescription];
+        }
         if (buttonProps[kThemeableBrowserPropImage] || buttonProps[kThemeableBrowserPropWwwImage]) {
             buttonImage = [self getImage:buttonProps[kThemeableBrowserPropImage]
                                  altPath:buttonProps[kThemeableBrowserPropWwwImage]
-                              altDensity:[buttonProps[kThemeableBrowserPropWwwImageDensity] doubleValue]];
+                              altDensity:[buttonProps[kThemeableBrowserPropWwwImageDensity] doubleValue]
+                accessibilityDescription: accessibilityDescription
+                           ];
             
             if (!buttonImage) {
                 [self.navigationDelegate emitError:kThemeableBrowserEmitCodeLoadFail
@@ -978,7 +988,9 @@
         if (buttonProps[kThemeableBrowserPropImagePressed] || buttonProps[kThemeableBrowserPropWwwImagePressed]) {
             buttonImagePressed = [self getImage:buttonProps[kThemeableBrowserPropImagePressed]
                                         altPath:buttonProps[kThemeableBrowserPropWwwImagePressed]
-                                     altDensity:[buttonProps[kThemeableBrowserPropWwwImageDensity] doubleValue]];;
+                                     altDensity:[buttonProps[kThemeableBrowserPropWwwImageDensity] doubleValue]
+                       accessibilityDescription: accessibilityDescription
+                                  ];;
             
             if (!buttonImagePressed) {
                 [self.navigationDelegate emitError:kThemeableBrowserEmitCodeLoadFail
@@ -1699,3 +1711,4 @@
 
 
 @end
+
