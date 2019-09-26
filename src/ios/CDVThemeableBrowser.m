@@ -330,7 +330,6 @@
     nav.orientationDelegate = self.themeableBrowserViewController;
     nav.navigationBarHidden = YES;
     if (@available(iOS 13.0, *)) {
-        nav.modalInPresentation = true;
         nav.modalPresentationStyle = UIModalPresentationOverFullScreen;
     }
     
@@ -622,6 +621,13 @@
         
         [self.commandDelegate sendPluginResult:pluginResult callbackId:self.callbackId];
     }
+}
+
+- (UIWindow*)getTmpWindow
+{
+    // Set tmpWindow to hidden to make main webview responsive to touch again
+    // Based on https://stackoverflow.com/questions/4544489/how-to-remove-a-uiwindow
+    return self->tmpWindow;
 }
 
 - (void)browserExit
@@ -1234,18 +1240,24 @@
     self.currentURL = nil;
     self.webView.delegate = nil;
     
-    if ((self.navigationDelegate != nil) && [self.navigationDelegate respondsToSelector:@selector(browserExit)]) {
-        [self.navigationDelegate browserExit];
-    }
+    UIWindow* tmpWindow = [self.navigationDelegate getTmpWindow];
     
     // Run later to avoid the "took a long time" log message.
     dispatch_async(dispatch_get_main_queue(), ^{
         if ([self respondsToSelector:@selector(presentingViewController)]) {
-            [[self presentingViewController] dismissViewControllerAnimated:!_browserOptions.disableAnimation completion:nil];
+            [[self presentingViewController] dismissViewControllerAnimated:!_browserOptions.disableAnimation completion:^{
+                tmpWindow.hidden = YES;
+            }];
         } else {
-            [[self parentViewController] dismissViewControllerAnimated:!_browserOptions.disableAnimation completion:nil];
+            [[self parentViewController] dismissViewControllerAnimated:!_browserOptions.disableAnimation completion:^{
+                tmpWindow.hidden = YES;
+            }];
         }
     });
+    
+    if ((self.navigationDelegate != nil) && [self.navigationDelegate respondsToSelector:@selector(browserExit)]) {
+        [self.navigationDelegate browserExit];
+    }
     
 }
 
