@@ -63,6 +63,7 @@
 @class CDVThemeableBrowserViewController;
 
 @interface CDVThemeableBrowser : CDVPlugin {
+    UIWindow * tmpWindow;
     BOOL _injectedIframeBridge;
 }
 

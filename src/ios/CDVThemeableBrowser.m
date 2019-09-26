@@ -329,16 +329,27 @@
                                                     initWithRootViewController:self.themeableBrowserViewController];
     nav.orientationDelegate = self.themeableBrowserViewController;
     nav.navigationBarHidden = YES;
+    if (@available(iOS 13.0, *)) {
+        nav.modalInPresentation = true;
+        nav.modalPresentationStyle = UIModalPresentationOverFullScreen;
+    }
+    
+    __weak CDVThemeableBrowser* weakSelf = self;
+    
     // Run later to avoid the "took a long time" log message.
     dispatch_async(dispatch_get_main_queue(), ^{
         if (self.themeableBrowserViewController != nil) {
-            CGRect frame = [[UIScreen mainScreen] bounds];
-            UIWindow *tmpWindow = [[UIWindow alloc] initWithFrame:frame];
-            UIViewController *tmpController = [[UIViewController alloc] init];
-            [tmpWindow setRootViewController:tmpController];
-            [tmpWindow setWindowLevel:UIWindowLevelNormal];
+            __strong __typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf->tmpWindow) {
+                CGRect frame = [[UIScreen mainScreen] bounds];
+                strongSelf->tmpWindow = [[UIWindow alloc] initWithFrame:frame];
+            }
             
-            [tmpWindow makeKeyAndVisible];
+            UIViewController *tmpController = [[UIViewController alloc] init];
+            [strongSelf->tmpWindow setRootViewController:tmpController];
+            
+            
+            [strongSelf->tmpWindow makeKeyAndVisible];
             [tmpController presentViewController:nav animated:YES completion:nil];
         }
     });
@@ -626,6 +637,8 @@
     // Don't recycle the ViewController since it may be consuming a lot of memory.
     // Also - this is required for the PDF/User-Agent bug work-around.
     self.themeableBrowserViewController = nil;
+    
+    
     self.callbackId = nil;
     self.callbackIdPattern = nil;
     
