@@ -630,6 +630,10 @@
     return self->tmpWindow;
 }
 
+- (void) nilTmpWindow{
+    self->tmpWindow = nil;
+}
+
 - (void)browserExit
 {
     if (self.callbackId != nil) {
@@ -1239,18 +1243,17 @@
     [CDVUserAgentUtil releaseLock:&_userAgentLockToken];
     self.currentURL = nil;
     self.webView.delegate = nil;
-    
-    UIWindow* tmpWindow = [self.navigationDelegate getTmpWindow];
+    CDVThemeableBrowser* navigationDelegate = self.navigationDelegate;
     
     // Run later to avoid the "took a long time" log message.
     dispatch_async(dispatch_get_main_queue(), ^{
         if ([self respondsToSelector:@selector(presentingViewController)]) {
             [[self presentingViewController] dismissViewControllerAnimated:!_browserOptions.disableAnimation completion:^{
-                tmpWindow.hidden = YES;
+                [navigationDelegate nilTmpWindow];
             }];
         } else {
             [[self parentViewController] dismissViewControllerAnimated:!_browserOptions.disableAnimation completion:^{
-                tmpWindow.hidden = YES;
+                [navigationDelegate nilTmpWindow];
             }];
         }
     });
