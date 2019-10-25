@@ -113,7 +113,9 @@
 @property (nonatomic, weak) id <CDVScreenOrientationDelegate> orientationDelegate;
 @property (nonatomic, weak) CDVThemeableBrowser* navigationDelegate;
 @property (nonatomic) NSURL* currentURL;
-@property (nonatomic) CGFloat titleOffset;
+@property (nonatomic) CGFloat titleOffsetLeft;
+@property (nonatomic) CGFloat titleOffsetRight;
+@property (nonatomic) CGFloat toolbarPaddingX;
 
 - (void)close;
 - (void)reload;
