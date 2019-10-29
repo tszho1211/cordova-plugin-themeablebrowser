@@ -407,6 +407,7 @@ public class ThemeableBrowser extends CordovaPlugin {
                     // NB: wait for about:blank before dismissing
                     public void onPageFinished(WebView view, String url) {
                         if (dialog != null) {
+                            int myWidth = dialog.getWindow().getDecorView().getWidth();
                             dialog.dismiss();
                         }
 
@@ -569,10 +570,12 @@ public class ThemeableBrowser extends CordovaPlugin {
                 toolbar.setBackgroundColor(hexStringToColor(
                         toolbarDef != null && toolbarDef.color != null
                                 ? toolbarDef.color : "#ffffffff"));
-                toolbar.setLayoutParams(new ViewGroup.LayoutParams(
+
+                ViewGroup.LayoutParams toolbarLayoutParams = new ViewGroup.LayoutParams(
                         LayoutParams.MATCH_PARENT,
                         dpToPixels(toolbarDef != null
-                                ? toolbarDef.height : TOOLBAR_DEF_HEIGHT)));
+                                ? toolbarDef.height : TOOLBAR_DEF_HEIGHT));
+                toolbar.setLayoutParams(toolbarLayoutParams);
 
                 if (toolbarDef != null
                         && (toolbarDef.image != null || toolbarDef.wwwImage != null)) {
@@ -770,6 +773,9 @@ public class ThemeableBrowser extends CordovaPlugin {
                                     ? features.title.color : "#000000ff"));
                     if (features.title.staticText != null) {
                         title.setText(features.title.staticText);
+                    }
+                    if (features.title.fontSize != null) {
+                        title.setTextSize(features.title.fontSize);
                     }
                 }
 
@@ -997,10 +1003,30 @@ public class ThemeableBrowser extends CordovaPlugin {
                     int titleMargin = Math.max(
                             leftContainerWidth, rightContainerWidth);
 
+                    int paddingX = features.toolbar.paddingX;
+                    int titleMarginLeft, titleMarginRight;
+                    titleMarginLeft = titleMarginRight = titleMargin;
+                    if (leftContainerWidth == 0){
+                        titleMarginLeft = paddingX;
+                        title.setGravity(Gravity.LEFT);
+                    }else if (rightContainerWidth == 0){
+                        titleMarginRight = paddingX;
+                        title.setGravity(Gravity.RIGHT);
+                    }
+
                     FrameLayout.LayoutParams titleParams
                             = (FrameLayout.LayoutParams) title.getLayoutParams();
-                    titleParams.setMargins(titleMargin, 0, titleMargin, 0);
-                    toolbar.addView(title);
+                    titleParams.setMargins(titleMarginLeft, 0, titleMarginRight, 0);
+
+                    ViewGroup titleContainer;
+                    if (leftContainerWidth == 0){
+                        titleContainer = leftButtonContainer;
+                    }else if (rightContainerWidth == 0){
+                        titleContainer = rightButtonContainer;
+                    }else{
+                        titleContainer = toolbar;
+                    }
+                    titleContainer.addView(title);
                 }
 
                 if (features.fullscreen) {
@@ -1027,6 +1053,7 @@ public class ThemeableBrowser extends CordovaPlugin {
                 dialog.setContentView(main);
                 dialog.show();
                 dialog.getWindow().setAttributes(lp);
+
                 // the goal of openhidden is to load the url and not display it
                 // Show() needs to be called to cause the URL to be loaded
                 if(features.hidden) {
@@ -1567,12 +1594,14 @@ public class ThemeableBrowser extends CordovaPlugin {
         public String image;
         public String wwwImage;
         public double wwwImageDensity = 1;
+        public int paddingX = 0;
     }
 
     private static class Title {
         public String color;
         public String staticText;
         public boolean showPageTitle;
+        public Float fontSize;
     }
 
     public static class ArrayHelper {
