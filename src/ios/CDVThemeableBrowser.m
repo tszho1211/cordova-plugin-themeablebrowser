@@ -1458,7 +1458,7 @@
     if (@available(iOS 11, *)) {
         // iOS 11+
         CGFloat webviewOffset = _browserOptions.fullscreen ? toolbarPadding + toolbarHeight : toolbarHeight + statusBarOffset;
-        CGFloat webviewHeightOffset = _browserOptions.fullscreen ? -(toolbarHeight == statusBarOffset ? statusBarOffset+10 : statusBarOffset+toolbarHeight) : -(toolbarOffset+toolbarPadding);
+        CGFloat webviewHeightOffset = _browserOptions.fullscreen ? -(toolbarHeight == statusBarOffset ? statusBarOffset+10 : statusBarOffset+toolbarHeight-statusBarOffset+10) : -(toolbarOffset+toolbarPadding-statusBarOffset+10);
         
         if ([_browserOptions.toolbarposition isEqualToString:kThemeableBrowserToolbarBarPositionTop]) {
             // The webview height calculated did not take the status bar into account. Thus we need to remove status bar height to the webview height.
@@ -1472,8 +1472,8 @@
         
     } else {
         // iOS <=10
-        CGFloat webviewOffset = _browserOptions.fullscreen ? toolbarPadding + toolbarHeight - statusBarOffset : toolbarHeight;
-        CGFloat webviewHeightOffset = _browserOptions.fullscreen ? -(toolbarOffset+toolbarPadding+statusBarOffset) : 0;
+        CGFloat webviewOffset = _browserOptions.fullscreen ? toolbarPadding + toolbarHeight - statusBarOffset: toolbarHeight;
+        CGFloat webviewHeightOffset = _browserOptions.fullscreen ? -(toolbarOffset+toolbarHeight) : 0;
         if ([_browserOptions.toolbarposition isEqualToString:kThemeableBrowserToolbarBarPositionTop]) {
             [self.webView setFrame:CGRectMake(self.webView.frame.origin.x, webviewOffset, self.webView.frame.size.width, self.webView.frame.size.height+webviewHeightOffset)];
             [self.toolbar setFrame:CGRectMake(self.toolbar.frame.origin.x, toolbarOffset, self.toolbar.frame.size.width, self.toolbar.frame.size.height+toolbarPadding)];
