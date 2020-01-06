@@ -407,15 +407,17 @@ public class ThemeableBrowser extends CordovaPlugin {
                     // NB: wait for about:blank before dismissing
                     public void onPageFinished(WebView view, String url) {
                         if (dialog != null) {
-                            int myWidth = dialog.getWindow().getDecorView().getWidth();
-                            dialog.dismiss();
-                        }
+                            try{
+                                dialog.dismiss();
 
-                        // Clean up.
-                        dialog = null;
-                        inAppWebView = null;
-                        edittext = null;
-                        callbackContext = null;
+                                dialog = null;
+                                inAppWebView = null;
+                                edittext = null;
+                                callbackContext = null;
+                            }catch (Exception e){
+                                Log.e(LOG_TAG, "Error dismissing dialog: "+e.getMessage());
+                            }
+                        }
                     }
                 });
 
