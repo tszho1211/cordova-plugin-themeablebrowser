@@ -21,12 +21,18 @@
 #import <Cordova/CDVPluginResult.h>
 #import <Cordova/CDVUserAgentUtil.h>
 
+#if __has_include("CDVWKProcessPoolFactory.h")
+#import "CDVWKProcessPoolFactory.h"
+#endif
+
 #define    kThemeableBrowserTargetSelf @"_self"
 #define    kThemeableBrowserTargetSystem @"_system"
 #define    kThemeableBrowserTargetBlank @"_blank"
 
 #define    kThemeableBrowserToolbarBarPositionBottom @"bottom"
 #define    kThemeableBrowserToolbarBarPositionTop @"top"
+
+#define    IAB_BRIDGE_NAME @"cordova_iab"
 
 #define    kThemeableBrowserAlignLeft @"left"
 #define    kThemeableBrowserAlignRight @"right"
@@ -58,7 +64,7 @@
 #define    kThemeableBrowserEmitCodeUnexpected @"unexpected"
 #define    kThemeableBrowserEmitCodeUndefined @"undefined"
 
-#define    TOOLBAR_DEF_HEIGHT 44.0
+#define    TOOLBAR_HEIGHT 44.0
 #define    LOCATIONBAR_HEIGHT 21.0
 #define    FOOTER_HEIGHT ((TOOLBAR_HEIGHT) + (LOCATIONBAR_HEIGHT))
 
@@ -218,27 +224,68 @@
     // ThemeableBrowser is needed, it wouldn't be super pain in the ass.
     browserOptions.toolbarposition = kThemeableBrowserToolbarBarPositionTop;
     
-    if (browserOptions.clearcache) {
-        NSHTTPCookie *cookie;
-        NSHTTPCookieStorage *storage = [NSHTTPCookieStorage sharedHTTPCookieStorage];
-        for (cookie in [storage cookies])
-        {
-            if (![cookie.domain isEqual: @".^filecookies^"]) {
-                [storage deleteCookie:cookie];
-            }
-        }
-    }
+    WKWebsiteDataStore* dataStore = [WKWebsiteDataStore defaultDataStore];
     
-    if (browserOptions.clearsessioncache) {
-        NSHTTPCookie *cookie;
-        NSHTTPCookieStorage *storage = [NSHTTPCookieStorage sharedHTTPCookieStorage];
-        for (cookie in [storage cookies])
-        {
-            if (![cookie.domain isEqual: @".^filecookies^"] && cookie.isSessionOnly) {
-                [storage deleteCookie:cookie];
+        if (browserOptions.clearcache) {
+            bool isAtLeastiOS11 = false;
+    #if __IPHONE_OS_VERSION_MAX_ALLOWED >= 110000
+            if (@available(iOS 11.0, *)) {
+                isAtLeastiOS11 = true;
+            }
+    #endif
+                
+            if(isAtLeastiOS11){
+    #if __IPHONE_OS_VERSION_MAX_ALLOWED >= 110000
+                // Deletes all cookies
+                WKHTTPCookieStore* cookieStore = dataStore.httpCookieStore;
+                [cookieStore getAllCookies:^(NSArray* cookies) {
+                    NSHTTPCookie* cookie;
+                    for(cookie in cookies){
+                        [cookieStore deleteCookie:cookie completionHandler:nil];
+                    }
+                }];
+    #endif
+            }else{
+                // https://stackoverflow.com/a/31803708/777265
+                // Only deletes domain cookies (not session cookies)
+                [dataStore fetchDataRecordsOfTypes:[WKWebsiteDataStore allWebsiteDataTypes]
+                 completionHandler:^(NSArray<WKWebsiteDataRecord *> * __nonnull records) {
+                     for (WKWebsiteDataRecord *record  in records){
+                         NSSet<NSString*>* dataTypes = record.dataTypes;
+                         if([dataTypes containsObject:WKWebsiteDataTypeCookies]){
+                             [[WKWebsiteDataStore defaultDataStore] removeDataOfTypes:record.dataTypes
+                                   forDataRecords:@[record]
+                                   completionHandler:^{}];
+                         }
+                     }
+                 }];
             }
         }
-    }
+        
+        if (browserOptions.clearsessioncache) {
+            bool isAtLeastiOS11 = false;
+    #if __IPHONE_OS_VERSION_MAX_ALLOWED >= 110000
+            if (@available(iOS 11.0, *)) {
+                isAtLeastiOS11 = true;
+            }
+    #endif
+            if (isAtLeastiOS11) {
+    #if __IPHONE_OS_VERSION_MAX_ALLOWED >= 110000
+                // Deletes session cookies
+                WKHTTPCookieStore* cookieStore = dataStore.httpCookieStore;
+                [cookieStore getAllCookies:^(NSArray* cookies) {
+                    NSHTTPCookie* cookie;
+                    for(cookie in cookies){
+                        if(cookie.sessionOnly){
+                            [cookieStore deleteCookie:cookie completionHandler:nil];
+                        }
+                    }
+                }];
+    #endif
+            }else{
+                NSLog(@"clearsessioncache not available below iOS 11.0");
+            }
+        }
     
     UIStatusBarStyle statusBarStyle = UIStatusBarStyleDefault;
     if(browserOptions.statusbar[kThemeableBrowserPropStatusBarStyle]){
@@ -259,6 +306,7 @@
                                                browserOptions: browserOptions
                                                navigationDelete:self
                                                statusBarStyle:statusBarStyle];
+        self.themeableBrowserViewController.navigationDelegate = self;
         
         if ([self.viewController conformsToProtocol:@protocol(CDVScreenOrientationDelegate)]) {
             self.themeableBrowserViewController.orientationDelegate = (UIViewController <CDVScreenOrientationDelegate>*)self.viewController;
@@ -303,15 +351,6 @@
                 }
             }
         }
-    }
-    
-    // UIWebView options
-    self.themeableBrowserViewController.webView.scalesPageToFit = browserOptions.zoom;
-    self.themeableBrowserViewController.webView.mediaPlaybackRequiresUserAction = browserOptions.mediaplaybackrequiresuseraction;
-    self.themeableBrowserViewController.webView.allowsInlineMediaPlayback = browserOptions.allowinlinemediaplayback;
-    if (IsAtLeastiOSVersion(@"6.0")) {
-        self.themeableBrowserViewController.webView.keyboardDisplayRequiresUserAction = browserOptions.keyboarddisplayrequiresuseraction;
-        self.themeableBrowserViewController.webView.suppressesIncrementalRendering = browserOptions.suppressesincrementalrendering;
     }
     
     [self.themeableBrowserViewController navigateTo:url];
@@ -395,19 +434,6 @@
     }
 }
 
--(void)createIframeBridge
-{
-    if (!_injectedIframeBridge) {
-        _injectedIframeBridge = YES;
-        // Create an iframe bridge in the new document to communicate with the CDVThemeableBrowserViewController
-        NSString* jsIframeBridge = @"var e = _cdvIframeBridge = d.createElement('iframe');e.style.display='none';d.body.appendChild(e);";
-        // Add the postMessage API
-        NSString* jspostMessageApi = @"window.webkit={messageHandlers:{cordova_iab:{postMessage:function(message){_cdvIframeBridge.src='gap-iab://message/'+encodeURIComponent(message);}}}}";
-        // Inject the JS to the webview
-        [self.themeableBrowserViewController.webView stringByEvaluatingJavaScriptFromString:[NSString stringWithFormat:@"(function(d){%@%@})(document)", jsIframeBridge, jspostMessageApi]];
-    }
-}
-
 // This is a helper method for the inject{Script|Style}{Code|File} API calls, which
 // provides a consistent method for injecting JavaScript code into the document.
 //
@@ -419,17 +445,35 @@
 
 - (void)injectDeferredObject:(NSString*)source withWrapper:(NSString*)jsWrapper
 {
+    // Ensure a message handler bridge is created to communicate with the CDVWKthemeableBrowserViewController
+    [self evaluateJavaScript: [NSString stringWithFormat:@"(function(w){if(!w._cdvMessageHandler) {w._cdvMessageHandler = function(id,d){w.webkit.messageHandlers.%@.postMessage({d:d, id:id});}}})(window)", IAB_BRIDGE_NAME]];
+    
     if (jsWrapper != nil) {
         NSData* jsonData = [NSJSONSerialization dataWithJSONObject:@[source] options:0 error:nil];
         NSString* sourceArrayString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
         if (sourceArrayString) {
             NSString* sourceString = [sourceArrayString substringWithRange:NSMakeRange(1, [sourceArrayString length] - 2)];
             NSString* jsToInject = [NSString stringWithFormat:jsWrapper, sourceString];
-            [self.themeableBrowserViewController.webView stringByEvaluatingJavaScriptFromString:jsToInject];
+            [self evaluateJavaScript:jsToInject];
         }
     } else {
-        [self.themeableBrowserViewController.webView stringByEvaluatingJavaScriptFromString:source];
+        [self evaluateJavaScript:source];
     }
+}
+
+
+//Synchronus helper for javascript evaluation
+- (void)evaluateJavaScript:(NSString *)script {
+    __block NSString* _script = script;
+    [self.themeableBrowserViewController.webView evaluateJavaScript:script completionHandler:^(id result, NSError *error) {
+        if (error == nil) {
+            if (result != nil) {
+                NSLog(@"%@", result);
+            }
+        } else {
+            NSLog(@"evaluateJavaScript error : %@ : %@", error.localizedDescription, _script);
+        }
+    }];
 }
 
 - (void)injectScriptCode:(CDVInvokedUrlCommand*)command
@@ -437,7 +481,7 @@
     NSString* jsWrapper = nil;
     
     if ((command.callbackId != nil) && ![command.callbackId isEqualToString:@"INVALID"]) {
-        jsWrapper = [NSString stringWithFormat:@"_cdvIframeBridge.src='gap-iab://%@/'+encodeURIComponent(JSON.stringify([eval(%%@)]));", command.callbackId];
+        jsWrapper = [NSString stringWithFormat:@"_cdvMessageHandler('%@',JSON.stringify([eval(%%@)]));", command.callbackId];
     }
     [self injectDeferredObject:[command argumentAtIndex:0] withWrapper:jsWrapper];
 }
@@ -447,7 +491,7 @@
     NSString* jsWrapper;
     
     if ((command.callbackId != nil) && ![command.callbackId isEqualToString:@"INVALID"]) {
-        jsWrapper = [NSString stringWithFormat:@"(function(d) { var c = d.createElement('script'); c.src = %%@; c.onload = function() { _cdvIframeBridge.src='gap-iab://%@'; }; d.body.appendChild(c); })(document)", command.callbackId];
+        jsWrapper = [NSString stringWithFormat:@"(function(d) { var c = d.createElement('script'); c.src = %%@; c.onload = function() { _cdvMessageHandler('%@'); }; d.body.appendChild(c); })(document)", command.callbackId];
     } else {
         jsWrapper = @"(function(d) { var c = d.createElement('script'); c.src = %@; d.body.appendChild(c); })(document)";
     }
@@ -459,7 +503,7 @@
     NSString* jsWrapper;
     
     if ((command.callbackId != nil) && ![command.callbackId isEqualToString:@"INVALID"]) {
-        jsWrapper = [NSString stringWithFormat:@"(function(d) { var c = d.createElement('style'); c.innerHTML = %%@; c.onload = function() { _cdvIframeBridge.src='gap-iab://%@'; }; d.body.appendChild(c); })(document)", command.callbackId];
+        jsWrapper = [NSString stringWithFormat:@"(function(d) { var c = d.createElement('style'); c.innerHTML = %%@; c.onload = function() { _cdvMessageHandler('%@'); }; d.body.appendChild(c); })(document)", command.callbackId];
     } else {
         jsWrapper = @"(function(d) { var c = d.createElement('style'); c.innerHTML = %@; d.body.appendChild(c); })(document)";
     }
@@ -471,7 +515,7 @@
     NSString* jsWrapper;
     
     if ((command.callbackId != nil) && ![command.callbackId isEqualToString:@"INVALID"]) {
-        jsWrapper = [NSString stringWithFormat:@"(function(d) { var c = d.createElement('link'); c.rel='stylesheet'; c.type='text/css'; c.href = %%@; c.onload = function() { _cdvIframeBridge.src='gap-iab://%@'; }; d.body.appendChild(c); })(document)", command.callbackId];
+        jsWrapper = [NSString stringWithFormat:@"(function(d) { var c = d.createElement('link'); c.rel='stylesheet'; c.type='text/css'; c.href = %%@; c.onload = function() { _cdvMessageHandler('%@'); }; d.body.appendChild(c); })(document)", command.callbackId];
     } else {
         jsWrapper = @"(function(d) { var c = d.createElement('link'); c.rel='stylesheet', c.type='text/css'; c.href = %@; d.body.appendChild(c); })(document)";
     }
@@ -496,92 +540,24 @@
 }
 
 /**
- * The iframe bridge provided for the ThemeableBrowser is capable of executing any oustanding callback belonging
- * to the ThemeableBrowser plugin. Care has been taken that other callbacks cannot be triggered, and that no
+ * The message handler bridge provided for the InAppBrowser is capable of executing any oustanding callback belonging
+ * to the InAppBrowser plugin. Care has been taken that other callbacks cannot be triggered, and that no
  * other code execution is possible.
- *
- * To trigger the bridge, the iframe (or any other resource) should attempt to load a url of the form:
- *
- * gap-iab://<callbackId>/<arguments>
- *
- * where <callbackId> is the string id of the callback to trigger (something like "ThemeableBrowser0123456789")
- *
- * If present, the path component of the special gap-iab:// url is expected to be a URL-escaped JSON-encoded
- * value to pass to the callback. [NSURL path] should take care of the URL-unescaping, and a JSON_EXCEPTION
- * is returned if the JSON is invalid.
  */
-- (BOOL)webView:(UIWebView*)theWebView shouldStartLoadWithRequest:(NSURLRequest*)request navigationType:(UIWebViewNavigationType)navigationType
-{
-    NSURL* url = request.URL;
-    BOOL isTopLevelNavigation = [request.URL isEqual:[request mainDocumentURL]];
+- (void)webView:(WKWebView *)theWebView decidePolicyForNavigationAction:(WKNavigationAction *)navigationAction decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler {
     
-    // See if the url uses the 'gap-iab' protocol. If so, the host should be the id of a callback to execute,
-    // and the path, if present, should be a JSON-encoded value to pass to the callback.
-    if ([[url scheme] isEqualToString:@"gap-iab"]) {
-        NSString* scriptCallbackId = [url host];
-        CDVPluginResult* pluginResult = nil;
-        
-        if ([self isValidCallbackId:scriptCallbackId]) {
-            NSString* scriptResult = [url path];
-            NSError* __autoreleasing error = nil;
-            
-            // The message should be a JSON-encoded array of the result of the script which executed.
-            if ((scriptResult != nil) && ([scriptResult length] > 1)) {
-                scriptResult = [scriptResult substringFromIndex:1];
-                NSData* decodedResult = [NSJSONSerialization JSONObjectWithData:[scriptResult dataUsingEncoding:NSUTF8StringEncoding] options:kNilOptions error:&error];
-                if ((error == nil) && [decodedResult isKindOfClass:[NSArray class]]) {
-                    pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:(NSArray*)decodedResult];
-                } else {
-                    pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_JSON_EXCEPTION];
-                }
-            } else {
-                pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:@[]];
-            }
-            [self.commandDelegate sendPluginResult:pluginResult callbackId:scriptCallbackId];
-            return NO;
-        }else if ([scriptCallbackId isEqualToString:@"message"] && (self.callbackId != nil)) {
-            // Send a message event
-            NSString* scriptResult = [url path];
-            if ((scriptResult != nil) && ([scriptResult length] > 1)) {
-                scriptResult = [scriptResult substringFromIndex:1];
-                NSError* __autoreleasing error = nil;
-                NSData* decodedResult = [NSJSONSerialization JSONObjectWithData:[scriptResult dataUsingEncoding:NSUTF8StringEncoding] options:kNilOptions error:&error];
-                if (error == nil) {
-                    NSMutableDictionary* dResult = [NSMutableDictionary new];
-                    [dResult setValue:@"message" forKey:@"type"];
-                    [dResult setObject:decodedResult forKey:@"data"];
-                    CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:dResult];
-                    [pluginResult setKeepCallback:[NSNumber numberWithBool:YES]];
-                    [self.commandDelegate sendPluginResult:pluginResult callbackId:self.callbackId];
-                }
-            }
-        }
-    } else if ([self isSystemUrl:url]) {
-        // Do not allow iTunes store links from ThemeableBrowser as they do not work
-        // instead open them with App Store app or Safari
-        [[UIApplication sharedApplication] openURL:url];
-        
-        // only in the case where a redirect link is opened in a freshly started
-        // ThemeableBrowser frame, trigger ThemeableBrowserRedirectExternalOnOpen
-        // event. This event can be handled in the app-side -- for instance, to
-        // close the ThemeableBrowser as the frame will contain a blank page
-        if (
-            originalUrl != nil
-            && [[originalUrl absoluteString] isEqualToString:[initUrl absoluteString]]
-            && _framesOpened == 1
-            ) {
-            NSDictionary *event = @{
-                                    @"type": @"ThemeableBrowserRedirectExternalOnOpen",
-                                    @"message": @"ThemeableBrowser redirected to open an external app on fresh start"
-                                    };
-            
-            [self emitEvent:event];
-        }
-        
-        // do not load content in the web view since this URL is handled by an
-        // external app
-        return NO;
-    } else if ((self.callbackId != nil) && isTopLevelNavigation) {
+    NSURL* url = navigationAction.request.URL;
+    NSURL* mainDocumentURL = navigationAction.request.mainDocumentURL;
+    BOOL isTopLevelNavigation = [url isEqual:mainDocumentURL];
+    BOOL shouldStart = YES;
+    
+    //if is an app store link, let the system handle it, otherwise it fails to load it
+    if ([[ url scheme] isEqualToString:@"itms-appss"] || [[ url scheme] isEqualToString:@"itms-apps"]) {
+        [theWebView stopLoading];
+        [self openInSystem:url];
+        shouldStart = NO;
+    }
+    else if ((self.callbackId != nil) && isTopLevelNavigation) {
         // Send a loadstart event for each top-level navigation (includes redirects).
         CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK
                                                       messageAsDictionary:@{@"type":@"loadstart", @"url":[url absoluteString]}];
@@ -590,46 +566,94 @@
         [self.commandDelegate sendPluginResult:pluginResult callbackId:self.callbackId];
     }
     
-    // originalUrl is used to detect redirect. This works by storing the
-    // request URL of the original frame when it's about to be loaded. A redirect
-    // will cause shouldStartLoadWithRequest to be called again before the
-    // original frame finishes loading (originalUrl becomes nil upon the frame
-    // finishing loading). On second time shouldStartLoadWithRequest
-    // is called, this stored original frame's URL can be compared against
-    // the URL of the new request. A mismatch implies redirect.
-    originalUrl = request.URL;
+    if(shouldStart){
+        // Fix GH-417 & GH-424: Handle non-default target attribute
+        // Based on https://stackoverflow.com/a/25713070/777265
+        if (!navigationAction.targetFrame){
+            [theWebView loadRequest:navigationAction.request];
+            decisionHandler(WKNavigationActionPolicyCancel);
+        }else{
+            decisionHandler(WKNavigationActionPolicyAllow);
+        }
+    }else{
+        decisionHandler(WKNavigationActionPolicyCancel);
+    }
+}
+
+#pragma mark WKScriptMessageHandler delegate
+- (void)userContentController:(nonnull WKUserContentController *)userContentController didReceiveScriptMessage:(nonnull WKScriptMessage *)message {
     
-    return YES;
+    CDVPluginResult* pluginResult = nil;
+    
+    if([message.body isKindOfClass:[NSDictionary class]]){
+        NSDictionary* messageContent = (NSDictionary*) message.body;
+        NSString* scriptCallbackId = messageContent[@"id"];
+        
+        if([messageContent objectForKey:@"d"]){
+            NSString* scriptResult = messageContent[@"d"];
+            NSError* __autoreleasing error = nil;
+            NSData* decodedResult = [NSJSONSerialization JSONObjectWithData:[scriptResult dataUsingEncoding:NSUTF8StringEncoding] options:kNilOptions error:&error];
+            if ((error == nil) && [decodedResult isKindOfClass:[NSArray class]]) {
+                pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:(NSArray*)decodedResult];
+            } else {
+                pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_JSON_EXCEPTION];
+            }
+        } else {
+            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:@[]];
+        }
+        [self.commandDelegate sendPluginResult:pluginResult callbackId:scriptCallbackId];
+    }else if(self.callbackId != nil){
+        // Send a message event
+        NSString* messageContent = (NSString*) message.body;
+        NSError* __autoreleasing error = nil;
+        NSData* decodedResult = [NSJSONSerialization JSONObjectWithData:[messageContent dataUsingEncoding:NSUTF8StringEncoding] options:kNilOptions error:&error];
+        if (error == nil) {
+            NSMutableDictionary* dResult = [NSMutableDictionary new];
+            [dResult setValue:@"message" forKey:@"type"];
+            [dResult setObject:decodedResult forKey:@"data"];
+            CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:dResult];
+            [pluginResult setKeepCallback:[NSNumber numberWithBool:YES]];
+            [self.commandDelegate sendPluginResult:pluginResult callbackId:self.callbackId];
+        }
+    }
 }
 
-- (void)webViewDidStartLoad:(UIWebView*)theWebView
+- (void)didStartProvisionalNavigation:(WKWebView*)theWebView
 {
-    _injectedIframeBridge = NO;
-    _framesOpened++;
+    NSLog(@"didStartProvisionalNavigation");
+//    self.inAppBrowserViewController.currentURL = theWebView.URL;
 }
 
-- (void)webViewDidFinishLoad:(UIWebView*)theWebView
+- (void)didFinishNavigation:(WKWebView*)theWebView
 {
-    [self createIframeBridge];
     if (self.callbackId != nil) {
-        // TODO: It would be more useful to return the URL the page is actually on (e.g. if it's been redirected).
-        NSString* url = [self.themeableBrowserViewController.currentURL absoluteString];
+        NSString* url = [theWebView.URL absoluteString];
+        if(url == nil){
+            if(self.themeableBrowserViewController.currentURL != nil){
+                url = [self.themeableBrowserViewController.currentURL absoluteString];
+            }else{
+                url = @"";
+            }
+        }
         CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK
                                                       messageAsDictionary:@{@"type":@"loadstop", @"url":url}];
         [pluginResult setKeepCallback:[NSNumber numberWithBool:YES]];
-        
-        // once a web view finished loading a frame, reset the stored original
-        // URL of the frame so that it can be used to detect next redirection
-        originalUrl = nil;
         
         [self.commandDelegate sendPluginResult:pluginResult callbackId:self.callbackId];
     }
 }
 
-- (void)webView:(UIWebView*)theWebView didFailLoadWithError:(NSError*)error
+- (void)webView:(WKWebView*)theWebView didFailNavigation:(NSError*)error
 {
     if (self.callbackId != nil) {
-        NSString* url = [self.themeableBrowserViewController.currentURL absoluteString];
+        NSString* url = [theWebView.URL absoluteString];
+        if(url == nil){
+            if(self.themeableBrowserViewController.currentURL != nil){
+                url = [self.themeableBrowserViewController.currentURL absoluteString];
+            }else{
+                url = @"";
+            }
+        }
         CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR
                                                       messageAsDictionary:@{@"type":@"loaderror", @"url":url, @"code": [NSNumber numberWithInteger:error.code], @"message": error.localizedDescription}];
         [pluginResult setKeepCallback:[NSNumber numberWithBool:YES]];
@@ -657,6 +681,16 @@
         [self.commandDelegate sendPluginResult:pluginResult callbackId:self.callbackId];
         self.callbackId = nil;
     }
+    
+    [self.themeableBrowserViewController.configuration.userContentController removeScriptMessageHandlerForName:IAB_BRIDGE_NAME];
+    self.themeableBrowserViewController.configuration = nil;
+    
+    [self.themeableBrowserViewController.webView stopLoading];
+    [self.themeableBrowserViewController.webView removeFromSuperview];
+    [self.themeableBrowserViewController.webView setUIDelegate:nil];
+    [self.themeableBrowserViewController.webView setNavigationDelegate:nil];
+    self.themeableBrowserViewController.webView = nil;
+    
     // Set navigationDelegate to nil to ensure no callbacks are received from it.
     self.themeableBrowserViewController.navigationDelegate = nil;
     // Don't recycle the ViewController since it may be consuming a lot of memory.
@@ -711,6 +745,7 @@
 @implementation CDVThemeableBrowserViewController
 
 @synthesize currentURL;
+CGFloat lastReducedStatusBarHeight = 0.0;
 
 - (id)initWithUserAgent:(NSString*)userAgent prevUserAgent:(NSString*)prevUserAgent browserOptions: (CDVThemeableBrowserOptions*) browserOptions navigationDelete:(CDVThemeableBrowser*) navigationDelegate statusBarStyle:(UIStatusBarStyle) statusBarStyle
 {
@@ -719,11 +754,8 @@
         _userAgent = userAgent;
         _prevUserAgent = prevUserAgent;
         _browserOptions = browserOptions;
-#ifdef __CORDOVA_4_0_0
-        _webViewDelegate = [[CDVUIWebViewDelegate alloc] initWithDelegate:self];
-#else
-        _webViewDelegate = [[CDVWebViewDelegate alloc] initWithDelegate:self];
-#endif
+        self.webViewUIDelegate = [[CDVThemeableBrowserUIDelegate alloc] initWithTitle:[[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleDisplayName"]];
+        [self.webViewUIDelegate setViewController:self];
         _navigationDelegate = navigationDelegate;
         _statusBarStyle = statusBarStyle;
         [self createViews];
@@ -739,18 +771,42 @@
     CGRect webViewBounds = self.view.bounds;
     BOOL toolbarIsAtBottom = ![_browserOptions.toolbarposition isEqualToString:kThemeableBrowserToolbarBarPositionTop];
     NSDictionary* toolbarProps = _browserOptions.toolbar;
-    CGFloat toolbarHeight = [self getFloatFromDict:toolbarProps withKey:kThemeableBrowserPropHeight withDefault:TOOLBAR_DEF_HEIGHT];
+    CGFloat toolbarHeight = [self getFloatFromDict:toolbarProps withKey:kThemeableBrowserPropHeight withDefault:TOOLBAR_HEIGHT];
     if (!_browserOptions.fullscreen) {
         webViewBounds.size.height -= toolbarHeight;
     }
-    self.webView = [[UIWebView alloc] initWithFrame:webViewBounds];
+        WKUserContentController* userContentController = [[WKUserContentController alloc] init];
+        
+        WKWebViewConfiguration* configuration = [[WKWebViewConfiguration alloc] init];
+        configuration.userContentController = userContentController;
+    #if __has_include("CDVWKProcessPoolFactory.h")
+        configuration.processPool = [[CDVWKProcessPoolFactory sharedFactory] sharedProcessPool];
+    #endif
+        [configuration.userContentController addScriptMessageHandler:self name:IAB_BRIDGE_NAME];
+        
+        //WKWebView options
+        configuration.allowsInlineMediaPlayback = _browserOptions.allowinlinemediaplayback;
+        if (IsAtLeastiOSVersion(@"10.0")) {
+            if(_browserOptions.mediaplaybackrequiresuseraction == YES){
+                configuration.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeAll;
+            }else{
+                configuration.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeNone;
+            }
+        }else{ // iOS 9
+            configuration.mediaPlaybackRequiresUserAction = _browserOptions.mediaplaybackrequiresuseraction;
+        }
+        
+        
+
+        self.webView = [[WKWebView alloc] initWithFrame:webViewBounds configuration:configuration];
     
     self.webView.autoresizingMask = (UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight);
     
     [self.view addSubview:self.webView];
     [self.view sendSubviewToBack:self.webView];
     
-    self.webView.delegate = _webViewDelegate;
+    self.webView.navigationDelegate = self;
+    self.webView.UIDelegate = self.webViewUIDelegate;
     self.webView.backgroundColor = [UIColor whiteColor];
     
     self.webView.clearsContextBeforeDrawing = YES;
@@ -758,8 +814,17 @@
     self.webView.contentMode = UIViewContentModeScaleToFill;
     self.webView.multipleTouchEnabled = YES;
     self.webView.opaque = YES;
-    self.webView.scalesPageToFit = NO;
     self.webView.userInteractionEnabled = YES;
+    self.automaticallyAdjustsScrollViewInsets = YES ;
+    [self.webView setAutoresizingMask:UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleWidth];
+    self.webView.allowsLinkPreview = NO;
+    self.webView.allowsBackForwardNavigationGestures = NO;
+        
+    #if __IPHONE_OS_VERSION_MAX_ALLOWED >= 110000
+       if (@available(iOS 11.0, *)) {
+           [self.webView.scrollView setContentInsetAdjustmentBehavior:UIScrollViewContentInsetAdjustmentNever];
+       }
+    #endif
     
     self.spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhite];
     self.spinner.alpha = 1.000;
@@ -1131,7 +1196,7 @@
 - (void)showLocationBar:(BOOL)show
 {
     CGRect locationbarFrame = self.addressLabel.frame;
-    CGFloat toolbarHeight = [self getFloatFromDict:_browserOptions.toolbar withKey:kThemeableBrowserPropHeight withDefault:TOOLBAR_DEF_HEIGHT];
+    CGFloat toolbarHeight = [self getFloatFromDict:_browserOptions.toolbar withKey:kThemeableBrowserPropHeight withDefault:TOOLBAR_HEIGHT];
     
     BOOL toolbarVisible = !self.toolbar.hidden;
     
@@ -1188,7 +1253,7 @@
 {
     CGRect toolbarFrame = self.toolbar.frame;
     CGRect locationbarFrame = self.addressLabel.frame;
-    CGFloat toolbarHeight = [self getFloatFromDict:_browserOptions.toolbar withKey:kThemeableBrowserPropHeight withDefault:TOOLBAR_DEF_HEIGHT];
+    CGFloat toolbarHeight = [self getFloatFromDict:_browserOptions.toolbar withKey:kThemeableBrowserPropHeight withDefault:TOOLBAR_HEIGHT];
     
     BOOL locationbarVisible = !self.addressLabel.hidden;
     
@@ -1256,9 +1321,14 @@
 - (void)viewDidUnload
 {
     [self.webView loadHTMLString:nil baseURL:nil];
-    self.webView.delegate = nil;
+    self.webView.UIDelegate = nil;
     [CDVUserAgentUtil releaseLock:&_userAgentLockToken];
     [super viewDidUnload];
+}
+
+- (void) viewDidDisappear:(BOOL)animated
+{
+    lastReducedStatusBarHeight = 0;
 }
 
 - (UIStatusBarStyle)preferredStatusBarStyle
@@ -1283,7 +1353,7 @@
     
     [CDVUserAgentUtil releaseLock:&_userAgentLockToken];
     self.currentURL = nil;
-    self.webView.delegate = nil;
+    self.webView.UIDelegate = nil;
     CDVThemeableBrowser* navigationDelegate = self.navigationDelegate;
     
     // Run later to avoid the "took a long time" log message.
@@ -1443,43 +1513,34 @@
 // change that value.
 //
 - (float) getStatusBarOffset {
-    CGRect statusBarFrame = [[UIApplication sharedApplication] statusBarFrame];
-    float statusBarOffset = IsAtLeastiOSVersion(@"7.0") ? MIN(statusBarFrame.size.width, statusBarFrame.size.height) : 0.0;
-    return statusBarOffset;
+    return (float) IsAtLeastiOSVersion(@"7.0") ? [[UIApplication sharedApplication] statusBarFrame].size.height : 0.0;
 }
 
 - (void) rePositionViews {
-    // Webview height is a bug that appear in the plugin for ios >= 11 so we need to keep the previous code that work great for previous versions
-    CGFloat toolbarHeight = [self getFloatFromDict:_browserOptions.toolbar withKey:kThemeableBrowserPropHeight withDefault:TOOLBAR_DEF_HEIGHT];
-    CGFloat statusBarOffset = [self getStatusBarOffset];
-    CGFloat toolbarOffset = _browserOptions.fullscreen ? 0.0 : statusBarOffset;
-    CGFloat toolbarPadding = _browserOptions.fullscreen ? statusBarOffset : 0.0;
+       
+    CGRect viewBounds = [self.webView bounds];
+    CGFloat statusBarHeight = [self getStatusBarOffset];
+    CGFloat toolbarHeight = [self getFloatFromDict:_browserOptions.toolbar withKey:kThemeableBrowserPropHeight withDefault:TOOLBAR_HEIGHT];
     
-    if (@available(iOS 11, *)) {
-        // iOS 11+
-        CGFloat webviewOffset = _browserOptions.fullscreen ? toolbarPadding + toolbarHeight : toolbarHeight + statusBarOffset;
-        CGFloat webviewHeightOffset = _browserOptions.fullscreen ? -(toolbarHeight == statusBarOffset ? statusBarOffset+10 : statusBarOffset+toolbarHeight-statusBarOffset+10) : -(toolbarOffset+toolbarPadding-statusBarOffset+10);
-        
-        if ([_browserOptions.toolbarposition isEqualToString:kThemeableBrowserToolbarBarPositionTop]) {
-            // The webview height calculated did not take the status bar into account. Thus we need to remove status bar height to the webview height.
-            [self.webView setFrame:CGRectMake(self.webView.frame.origin.x, webviewOffset, self.webView.frame.size.width, (self.webView.frame.size.height+webviewHeightOffset))];
-            [self.toolbar setFrame:CGRectMake(self.toolbar.frame.origin.x, toolbarOffset, self.toolbar.frame.size.width, self.toolbar.frame.size.height + toolbarPadding)];
-        }
-        // When positionning the iphone to landscape mode, status bar is hidden. The problem is that we set the webview height just before with removing the status bar height. We need to adjust the phenomen by adding the preview status bar height. We had to add manually 20 (pixel) because in landscape mode, the status bar height is equal to 0.
-        if (statusBarOffset == 0) {
-            [self.webView setFrame:CGRectMake(self.webView.frame.origin.x, webviewOffset, self.webView.frame.size.width, (self.webView.frame.size.height+20))];
-        }
-        
-    } else {
-        // iOS <=10
-        CGFloat webviewOffset = _browserOptions.fullscreen ? toolbarPadding + toolbarHeight - statusBarOffset: toolbarHeight;
-        CGFloat webviewHeightOffset = _browserOptions.fullscreen ? -(toolbarOffset+toolbarHeight) : 0;
-        if ([_browserOptions.toolbarposition isEqualToString:kThemeableBrowserToolbarBarPositionTop]) {
-            [self.webView setFrame:CGRectMake(self.webView.frame.origin.x, webviewOffset, self.webView.frame.size.width, self.webView.frame.size.height+webviewHeightOffset)];
-            [self.toolbar setFrame:CGRectMake(self.toolbar.frame.origin.x, toolbarOffset, self.toolbar.frame.size.width, self.toolbar.frame.size.height+toolbarPadding)];
-        }
+    // orientation portrait or portraitUpsideDown: status bar is on the top and web view is to be aligned to the bottom of the status bar
+    // orientation landscapeLeft or landscapeRight: status bar height is 0 in but lets account for it in case things ever change in the future
+    viewBounds.origin.y = statusBarHeight;
+    
+    // account for web view height portion that may have been reduced by a previous call to this method
+    viewBounds.size.height = viewBounds.size.height - statusBarHeight + lastReducedStatusBarHeight;
+    lastReducedStatusBarHeight = statusBarHeight;
+    
+    
+    if ((_browserOptions.toolbar) && ([_browserOptions.toolbarposition isEqualToString:kThemeableBrowserToolbarBarPositionTop])) {
+        // if we have to display the toolbar on top of the web view, we need to account for its height
+        viewBounds.origin.y += toolbarHeight;
+        self.toolbar.frame = CGRectMake(self.toolbar.frame.origin.x, statusBarHeight, self.toolbar.frame.size.width, self.toolbar.frame.size.height);
     }
+    self.webView.frame = viewBounds;
     
+    
+    
+    CGFloat toolbarPadding = _browserOptions.fullscreen ? statusBarHeight : 0.0;
     if (self.titleLabel) {
         CGFloat screenWidth = CGRectGetWidth(self.view.frame);
         NSInteger width = floorf(screenWidth - (self.titleOffsetLeft + self.titleOffsetRight));
@@ -1495,6 +1556,19 @@
     }
     
     [self layoutButtons];
+}
+
+- (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator
+{
+    [coordinator animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext> context)
+    {
+        [self rePositionViews];
+    } completion:^(id<UIViewControllerTransitionCoordinatorContext> context)
+    {
+
+    }];
+
+    [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
 }
 
 - (CGFloat) getFloatFromDict:(NSDictionary*)dict withKey:(NSString*)key withDefault:(CGFloat)def
@@ -1554,46 +1628,41 @@
     }
 }
 
-#pragma mark UIWebViewDelegate
+#pragma mark WKNavigationDelegate
 
-- (void)webViewDidStartLoad:(UIWebView*)theWebView
-{
-    // loading url, start spinner
+- (void)webView:(WKWebView *)theWebView didStartProvisionalNavigation:(WKNavigation *)navigation{
+    
+    // loading url, start spinner, update back/forward
     
     self.addressLabel.text = NSLocalizedString(@"Loading...", nil);
+    self.backButton.enabled = theWebView.canGoBack;
+    self.forwardButton.enabled = theWebView.canGoForward;
     
-    [self.spinner startAnimating];
-    
-    return [self.navigationDelegate webViewDidStartLoad:theWebView];
+    return [self.navigationDelegate didStartProvisionalNavigation:theWebView];
 }
 
-- (BOOL)webView:(UIWebView*)theWebView shouldStartLoadWithRequest:(NSURLRequest*)request navigationType:(UIWebViewNavigationType)navigationType
+- (void)webView:(WKWebView *)theWebView decidePolicyForNavigationAction:(WKNavigationAction *)navigationAction decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler
 {
-    BOOL isTopLevelNavigation = [request.URL isEqual:[request mainDocumentURL]];
+    NSURL *url = navigationAction.request.URL;
+    NSURL *mainDocumentURL = navigationAction.request.mainDocumentURL;
+    
+    BOOL isTopLevelNavigation = [url isEqual:mainDocumentURL];
     
     if (isTopLevelNavigation) {
-        self.currentURL = request.URL;
+        self.currentURL = url;
     }
     
-    [self updateButtonDelayed:theWebView];
-    
-    return [self.navigationDelegate webView:theWebView shouldStartLoadWithRequest:request navigationType:navigationType];
+    [self.navigationDelegate webView:theWebView decidePolicyForNavigationAction:navigationAction decisionHandler:decisionHandler];
 }
 
-- (void)webViewDidFinishLoad:(UIWebView*)theWebView
+- (void)webView:(WKWebView *)theWebView didFinishNavigation:(WKNavigation *)navigation
 {
     // update url, stop spinner, update back/forward
     
     self.addressLabel.text = [self.currentURL absoluteString];
-    [self updateButton:theWebView];
-    
-    if (self.titleLabel && _browserOptions.title
-        && !_browserOptions.title[kThemeableBrowserPropStaticText]
-        && [self getBoolFromDict:_browserOptions.title withKey:kThemeableBrowserPropShowPageTitle]) {
-        // Update title text to page title when title is shown and we are not
-        // required to show a static text.
-        self.titleLabel.text = [self.webView stringByEvaluatingJavaScriptFromString:@"document.title"];
-    }
+    self.backButton.enabled = theWebView.canGoBack;
+    self.forwardButton.enabled = theWebView.canGoForward;
+    theWebView.scrollView.contentInset = UIEdgeInsetsZero;
     
     [self.spinner stopAnimating];
     
@@ -1608,24 +1677,48 @@
     //    from it must pass through its white-list. This *does* break PDFs that
     //    contain links to other remote PDF/websites.
     // More info at https://issues.apache.org/jira/browse/CB-2225
-    BOOL isPDF = [@"true" isEqualToString :[theWebView stringByEvaluatingJavaScriptFromString:@"document.body==null"]];
+    BOOL isPDF = NO;
+    //TODO webview class
+    //BOOL isPDF = [@"true" isEqualToString :[theWebView evaluateJavaScript:@"document.body==null"]];
     if (isPDF) {
         [CDVUserAgentUtil setUserAgent:_prevUserAgent lockToken:_userAgentLockToken];
     }
     
-    [self.navigationDelegate webViewDidFinishLoad:theWebView];
+    [self.navigationDelegate didFinishNavigation:theWebView];
 }
-
-- (void)webView:(UIWebView*)theWebView didFailLoadWithError:(NSError*)error
-{
-    [self updateButton:theWebView];
     
+- (void)webView:(WKWebView*)theWebView failedNavigation:(NSString*) delegateName withError:(nonnull NSError *)error{
+    // log fail message, stop spinner, update back/forward
+    NSLog(@"webView:%@ - %ld: %@", delegateName, (long)error.code, [error localizedDescription]);
+    
+    self.backButton.enabled = theWebView.canGoBack;
+    self.forwardButton.enabled = theWebView.canGoForward;
     [self.spinner stopAnimating];
     
     self.addressLabel.text = NSLocalizedString(@"Load Error", nil);
     
-    [self.navigationDelegate webView:theWebView didFailLoadWithError:error];
+    [self.navigationDelegate webView:theWebView didFailNavigation:error];
 }
+
+- (void)webView:(WKWebView*)theWebView didFailNavigation:(null_unspecified WKNavigation *)navigation withError:(nonnull NSError *)error
+{
+    [self webView:theWebView failedNavigation:@"didFailNavigation" withError:error];
+}
+    
+- (void)webView:(WKWebView*)theWebView didFailProvisionalNavigation:(null_unspecified WKNavigation *)navigation withError:(nonnull NSError *)error
+{
+    [self webView:theWebView failedNavigation:@"didFailProvisionalNavigation" withError:error];
+}
+
+#pragma mark WKScriptMessageHandler delegate
+- (void)userContentController:(nonnull WKUserContentController *)userContentController didReceiveScriptMessage:(nonnull WKScriptMessage *)message {
+    if (![message.name isEqualToString:IAB_BRIDGE_NAME]) {
+        return;
+    }
+    //NSLog(@"Received script message %@", message.body);
+    [self.navigationDelegate userContentController:userContentController didReceiveScriptMessage:message];
+}
+
 
 - (void)updateButton:(UIWebView*)theWebView
 {
