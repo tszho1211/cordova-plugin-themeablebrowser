@@ -771,34 +771,30 @@ CGFloat lastReducedStatusBarHeight = 0.0;
     CGRect webViewBounds = self.view.bounds;
     BOOL toolbarIsAtBottom = ![_browserOptions.toolbarposition isEqualToString:kThemeableBrowserToolbarBarPositionTop];
     NSDictionary* toolbarProps = _browserOptions.toolbar;
-    CGFloat toolbarHeight = [self getFloatFromDict:toolbarProps withKey:kThemeableBrowserPropHeight withDefault:TOOLBAR_HEIGHT];
-    if (!_browserOptions.fullscreen) {
-        webViewBounds.size.height -= toolbarHeight;
-    }
-        WKUserContentController* userContentController = [[WKUserContentController alloc] init];
-        
-        WKWebViewConfiguration* configuration = [[WKWebViewConfiguration alloc] init];
-        configuration.userContentController = userContentController;
-    #if __has_include("CDVWKProcessPoolFactory.h")
-        configuration.processPool = [[CDVWKProcessPoolFactory sharedFactory] sharedProcessPool];
-    #endif
-        [configuration.userContentController addScriptMessageHandler:self name:IAB_BRIDGE_NAME];
-        
-        //WKWebView options
-        configuration.allowsInlineMediaPlayback = _browserOptions.allowinlinemediaplayback;
-        if (IsAtLeastiOSVersion(@"10.0")) {
-            if(_browserOptions.mediaplaybackrequiresuseraction == YES){
-                configuration.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeAll;
-            }else{
-                configuration.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeNone;
-            }
-        }else{ // iOS 9
-            configuration.mediaPlaybackRequiresUserAction = _browserOptions.mediaplaybackrequiresuseraction;
+    CGFloat toolbarOffsetHeight = [self getOffsetToolbarHeight];
+    
+    WKUserContentController* userContentController = [[WKUserContentController alloc] init];
+    
+    WKWebViewConfiguration* configuration = [[WKWebViewConfiguration alloc] init];
+    configuration.userContentController = userContentController;
+#if __has_include("CDVWKProcessPoolFactory.h")
+    configuration.processPool = [[CDVWKProcessPoolFactory sharedFactory] sharedProcessPool];
+#endif
+    [configuration.userContentController addScriptMessageHandler:self name:IAB_BRIDGE_NAME];
+    
+    //WKWebView options
+    configuration.allowsInlineMediaPlayback = _browserOptions.allowinlinemediaplayback;
+    if (IsAtLeastiOSVersion(@"10.0")) {
+        if(_browserOptions.mediaplaybackrequiresuseraction == YES){
+            configuration.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeAll;
+        }else{
+            configuration.mediaTypesRequiringUserActionForPlayback = WKAudiovisualMediaTypeNone;
         }
-        
-        
-
-        self.webView = [[WKWebView alloc] initWithFrame:webViewBounds configuration:configuration];
+    }else{ // iOS 9
+        configuration.mediaPlaybackRequiresUserAction = _browserOptions.mediaplaybackrequiresuseraction;
+    }
+    
+    self.webView = [[WKWebView alloc] initWithFrame:webViewBounds configuration:configuration];
     
     self.webView.autoresizingMask = (UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight);
     
@@ -841,8 +837,8 @@ CGFloat lastReducedStatusBarHeight = 0.0;
     self.spinner.userInteractionEnabled = NO;
     [self.spinner stopAnimating];
     
-    CGFloat toolbarY = toolbarIsAtBottom ? self.view.bounds.size.height - toolbarHeight : 0.0;
-    CGRect toolbarFrame = CGRectMake(0.0, toolbarY, self.view.bounds.size.width, toolbarHeight);
+    CGFloat toolbarY = toolbarIsAtBottom ? self.view.bounds.size.height - toolbarOffsetHeight : 0.0;
+    CGRect toolbarFrame = CGRectMake(0.0, toolbarY, self.view.bounds.size.width, toolbarOffsetHeight);
     
     self.toolbar = [[UIView alloc] initWithFrame:toolbarFrame];
     self.toolbar.alpha = 1.000;
@@ -1016,7 +1012,7 @@ CGFloat lastReducedStatusBarHeight = 0.0;
     // rePositionViews will take care of it a bit later.
     self.titleLabel = nil;
     if (_browserOptions.title) {
-        self.titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 0, 10, toolbarHeight)];
+        self.titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(10, 0, 10, toolbarOffsetHeight)];
         self.titleLabel.textAlignment = NSTextAlignmentCenter;
         self.titleLabel.numberOfLines = 1;
         self.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
@@ -1156,7 +1152,7 @@ CGFloat lastReducedStatusBarHeight = 0.0;
 {
     CGFloat screenWidth = CGRectGetWidth(self.view.frame);
     CGFloat toolbarHeight = self.toolbar.frame.size.height;
-    CGFloat toolbarPadding = _browserOptions.fullscreen ? [self getStatusBarOffset] : 0.0;
+    CGFloat toolbarPadding = _browserOptions.fullscreen ? [self getStatusBarHeight] : 0.0;
     
     // Layout leftButtons and rightButtons from outer to inner.
     CGFloat left = self.toolbarPaddingX;
@@ -1196,7 +1192,7 @@ CGFloat lastReducedStatusBarHeight = 0.0;
 - (void)showLocationBar:(BOOL)show
 {
     CGRect locationbarFrame = self.addressLabel.frame;
-    CGFloat toolbarHeight = [self getFloatFromDict:_browserOptions.toolbar withKey:kThemeableBrowserPropHeight withDefault:TOOLBAR_HEIGHT];
+    CGFloat toolbarHeight = [self getOffsetToolbarHeight];
     
     BOOL toolbarVisible = !self.toolbar.hidden;
     
@@ -1213,9 +1209,6 @@ CGFloat lastReducedStatusBarHeight = 0.0;
             // put locationBar on top of the toolBar
             
             CGRect webViewBounds = self.view.bounds;
-            if (!_browserOptions.fullscreen) {
-                webViewBounds.size.height -= toolbarHeight;
-            }
             [self setWebViewFrame:webViewBounds];
             
             locationbarFrame.origin.y = webViewBounds.size.height;
@@ -1238,9 +1231,6 @@ CGFloat lastReducedStatusBarHeight = 0.0;
             
             // webView take up whole height less toolBar height
             CGRect webViewBounds = self.view.bounds;
-            if (!_browserOptions.fullscreen) {
-                webViewBounds.size.height -= toolbarHeight;
-            }
             [self setWebViewFrame:webViewBounds];
         } else {
             // no toolBar, expand webView to screen dimensions
@@ -1253,7 +1243,7 @@ CGFloat lastReducedStatusBarHeight = 0.0;
 {
     CGRect toolbarFrame = self.toolbar.frame;
     CGRect locationbarFrame = self.addressLabel.frame;
-    CGFloat toolbarHeight = [self getFloatFromDict:_browserOptions.toolbar withKey:kThemeableBrowserPropHeight withDefault:TOOLBAR_HEIGHT];
+    CGFloat toolbarHeight = [self getOffsetToolbarHeight];
     
     BOOL locationbarVisible = !self.addressLabel.hidden;
     
@@ -1269,9 +1259,6 @@ CGFloat lastReducedStatusBarHeight = 0.0;
         if (locationbarVisible) {
             // locationBar at the bottom, move locationBar up
             // put toolBar at the bottom
-            if (!_browserOptions.fullscreen) {
-                webViewBounds.size.height -= toolbarHeight;
-            }
             locationbarFrame.origin.y = webViewBounds.size.height;
             self.addressLabel.frame = locationbarFrame;
             self.toolbar.frame = toolbarFrame;
@@ -1345,6 +1332,10 @@ CGFloat lastReducedStatusBarHeight = 0.0;
         }
     }
     return statusBarStyle;
+}
+
+- (BOOL) prefersStatusBarHidden{
+    return _browserOptions.fullscreen;
 }
 
 - (void)close
@@ -1507,40 +1498,90 @@ CGFloat lastReducedStatusBarHeight = 0.0;
     [super viewWillAppear:animated];
 }
 
-//
-// On iOS 7 the status bar is part of the view's dimensions, therefore it's height has to be taken into account.
-// The height of it could be hardcoded as 20 pixels, but that would assume that the upcoming releases of iOS won't
-// change that value.
-//
-- (float) getStatusBarOffset {
-    return (float) IsAtLeastiOSVersion(@"7.0") ? [[UIApplication sharedApplication] statusBarFrame].size.height : 0.0;
+
+- (CGFloat) getStatusBarHeight {
+    return [[UIApplication sharedApplication] statusBarFrame].size.height;
+}
+
+- (CGFloat) getStatusBarOffset {
+    CGFloat offset = 0;
+    if(_browserOptions.fullscreen){
+        UIDeviceOrientation orientation = [[UIDevice currentDevice] orientation];
+        if(orientation != UIDeviceOrientationPortrait){
+            offset = [self getTopSafeAreaInset];
+        }
+    }else{
+        offset = [self getStatusBarHeight];
+    }
+    return offset;
+}
+
+- (BOOL)hasTopNotch {
+    return [self getTopSafeAreaInset] > 20.0;
+}
+
+- (CGFloat) getTopSafeAreaInset {
+    if (@available(iOS 13.0, *)) {
+        return [self keyWindow].safeAreaInsets.top;
+    }else if (@available(iOS 11.0, *)){
+        return [[[UIApplication sharedApplication] delegate] window].safeAreaInsets.top;
+    }
+    return 0.0;
+}
+
+- (UIWindow*)keyWindow {
+    UIWindow        *foundWindow = nil;
+    NSArray         *windows = [[UIApplication sharedApplication]windows];
+    for (UIWindow   *window in windows) {
+        if (window.isKeyWindow) {
+            foundWindow = window;
+            break;
+        }
+    }
+    return foundWindow;
+}
+
+-(CGFloat) getToolbarTopSafeAreaOffset {
+    return _browserOptions.fullscreen ? [self getTopSafeAreaInset] : 0.0;
+}
+
+-(CGFloat) getOffsetToolbarHeight {
+    return [self getToolbarHeight] + [self getToolbarTopSafeAreaOffset];
+}
+
+-(CGFloat) getToolbarHeight {
+    return [self getFloatFromDict:_browserOptions.toolbar withKey:kThemeableBrowserPropHeight withDefault:TOOLBAR_HEIGHT];
 }
 
 - (void) rePositionViews {
        
     CGRect viewBounds = [self.webView bounds];
-    CGFloat statusBarHeight = [self getStatusBarOffset];
-    CGFloat toolbarHeight = [self getFloatFromDict:_browserOptions.toolbar withKey:kThemeableBrowserPropHeight withDefault:TOOLBAR_HEIGHT];
+    CGFloat statusBarHeight = [self getStatusBarHeight];
+    CGFloat statusBarOffset = [self getStatusBarOffset];
+    CGFloat toolbarHeight = [self getToolbarHeight];
+    CGFloat toolbarTopSafeAreaOffset = [self getToolbarTopSafeAreaOffset];
+    CGFloat toolbarOffsetHeight = [self getOffsetToolbarHeight];
     
     // orientation portrait or portraitUpsideDown: status bar is on the top and web view is to be aligned to the bottom of the status bar
     // orientation landscapeLeft or landscapeRight: status bar height is 0 in but lets account for it in case things ever change in the future
-    viewBounds.origin.y = statusBarHeight;
+    viewBounds.origin.y = statusBarOffset;
     
     // account for web view height portion that may have been reduced by a previous call to this method
-    viewBounds.size.height = viewBounds.size.height - statusBarHeight + lastReducedStatusBarHeight;
-    lastReducedStatusBarHeight = statusBarHeight;
+    viewBounds.size.height = viewBounds.size.height - statusBarOffset + (_browserOptions.fullscreen ? 0 : lastReducedStatusBarHeight);
+    lastReducedStatusBarHeight = statusBarOffset;
     
     
     if ((_browserOptions.toolbar) && ([_browserOptions.toolbarposition isEqualToString:kThemeableBrowserToolbarBarPositionTop])) {
         // if we have to display the toolbar on top of the web view, we need to account for its height
-        viewBounds.origin.y += toolbarHeight;
-        self.toolbar.frame = CGRectMake(self.toolbar.frame.origin.x, statusBarHeight, self.toolbar.frame.size.width, self.toolbar.frame.size.height);
+        viewBounds.origin.y += toolbarOffsetHeight;
+        viewBounds.size.height -= toolbarOffsetHeight;
+        self.toolbar.frame = CGRectMake(self.toolbar.frame.origin.x, statusBarOffset, self.toolbar.frame.size.width, self.toolbar.frame.size.height);
     }
     self.webView.frame = viewBounds;
     
     
     
-    CGFloat toolbarPadding = _browserOptions.fullscreen ? statusBarHeight : 0.0;
+    
     if (self.titleLabel) {
         CGFloat screenWidth = CGRectGetWidth(self.view.frame);
         NSInteger width = floorf(screenWidth - (self.titleOffsetLeft + self.titleOffsetRight));
@@ -1552,7 +1593,7 @@ CGFloat lastReducedStatusBarHeight = 0.0;
         }else{
             leftOffset = self.toolbarPaddingX;
         }
-        self.titleLabel.frame = CGRectMake(leftOffset, toolbarPadding/2, width, toolbarHeight+(toolbarPadding/2));
+        self.titleLabel.frame = CGRectMake(leftOffset, toolbarTopSafeAreaOffset, width, toolbarHeight);
     }
     
     [self layoutButtons];
