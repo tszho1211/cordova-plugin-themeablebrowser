@@ -758,6 +758,7 @@ CGFloat lastReducedStatusBarHeight = 0.0;
         [self.webViewUIDelegate setViewController:self];
         _navigationDelegate = navigationDelegate;
         _statusBarStyle = statusBarStyle;
+        _initialStatusBarHeight = [self getStatusBarHeight];
         [self createViews];
     }
     
@@ -1506,14 +1507,17 @@ CGFloat lastReducedStatusBarHeight = 0.0;
 - (CGFloat) getStatusBarOffset {
     CGFloat offset = 0;
     if(_browserOptions.fullscreen){
-        UIDeviceOrientation orientation = [[UIDevice currentDevice] orientation];
-        if(orientation != UIDeviceOrientationPortrait){
+        if(![self isPortrait]){
             offset = [self getTopSafeAreaInset];
         }
     }else{
         offset = [self getStatusBarHeight];
     }
     return offset;
+}
+
+- (BOOL) isPortrait{
+    return [[UIDevice currentDevice] orientation] == UIDeviceOrientationPortrait;
 }
 
 - (BOOL)hasTopNotch {
@@ -1556,11 +1560,9 @@ CGFloat lastReducedStatusBarHeight = 0.0;
 - (void) rePositionViews {
        
     CGRect viewBounds = [self.webView bounds];
-    CGFloat statusBarHeight = [self getStatusBarHeight];
     CGFloat statusBarOffset = [self getStatusBarOffset];
     CGFloat toolbarHeight = [self getToolbarHeight];
     CGFloat toolbarTopSafeAreaOffset = [self getToolbarTopSafeAreaOffset];
-    CGFloat toolbarOffsetHeight = [self getOffsetToolbarHeight];
     
     // orientation portrait or portraitUpsideDown: status bar is on the top and web view is to be aligned to the bottom of the status bar
     // orientation landscapeLeft or landscapeRight: status bar height is 0 in but lets account for it in case things ever change in the future
@@ -1570,11 +1572,16 @@ CGFloat lastReducedStatusBarHeight = 0.0;
     viewBounds.size.height = viewBounds.size.height - statusBarOffset + (_browserOptions.fullscreen ? 0 : lastReducedStatusBarHeight);
     lastReducedStatusBarHeight = statusBarOffset;
     
+    CGFloat initialWebViewHeight = self.view.frame.size.height;
     
     if ((_browserOptions.toolbar) && ([_browserOptions.toolbarposition isEqualToString:kThemeableBrowserToolbarBarPositionTop])) {
         // if we have to display the toolbar on top of the web view, we need to account for its height
-        viewBounds.origin.y += toolbarOffsetHeight;
-        viewBounds.size.height -= toolbarOffsetHeight;
+        CGFloat webViewOffset = [self getToolbarHeight] + (_browserOptions.fullscreen || [self isPortrait] ? _initialStatusBarHeight : 0) + (_browserOptions.fullscreen ? lastReducedStatusBarHeight : 0);
+        viewBounds.origin.y = webViewOffset;
+        
+        CGFloat webViewHeight = initialWebViewHeight - webViewOffset;
+        viewBounds.size.height = webViewHeight;
+        
         self.toolbar.frame = CGRectMake(self.toolbar.frame.origin.x, statusBarOffset, self.toolbar.frame.size.width, self.toolbar.frame.size.height);
     }
     self.webView.frame = viewBounds;

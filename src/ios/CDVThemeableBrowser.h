@@ -83,6 +83,7 @@
     NSString* _prevUserAgent;
     NSInteger _userAgentLockToken;
     UIStatusBarStyle _statusBarStyle;
+    CGFloat _initialStatusBarHeight;
     CDVThemeableBrowserOptions *_browserOptions;
     
     
