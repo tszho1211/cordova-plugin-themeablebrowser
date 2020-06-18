@@ -19,7 +19,6 @@
 
 #import "CDVThemeableBrowser.h"
 #import <Cordova/CDVPluginResult.h>
-#import <Cordova/CDVUserAgentUtil.h>
 
 #if __has_include("CDVWKProcessPoolFactory.h")
 #import "CDVWKProcessPoolFactory.h"
@@ -300,10 +299,8 @@
     }
     
     if (self.themeableBrowserViewController == nil) {
-        NSString* originalUA = [CDVUserAgentUtil originalUserAgent];
         self.themeableBrowserViewController = [[CDVThemeableBrowserViewController alloc]
-                                               initWithUserAgent:originalUA prevUserAgent:[self.commandDelegate userAgent]
-                                               browserOptions: browserOptions
+                                               init: browserOptions
                                                navigationDelete:self
                                                statusBarStyle:statusBarStyle];
         self.themeableBrowserViewController.navigationDelegate = self;
@@ -747,12 +744,10 @@
 @synthesize currentURL;
 CGFloat lastReducedStatusBarHeight = 0.0;
 
-- (id)initWithUserAgent:(NSString*)userAgent prevUserAgent:(NSString*)prevUserAgent browserOptions: (CDVThemeableBrowserOptions*) browserOptions navigationDelete:(CDVThemeableBrowser*) navigationDelegate statusBarStyle:(UIStatusBarStyle) statusBarStyle
+- (id)init:(CDVThemeableBrowserOptions*) browserOptions navigationDelete:(CDVThemeableBrowser*) navigationDelegate statusBarStyle:(UIStatusBarStyle) statusBarStyle
 {
     self = [super init];
     if (self != nil) {
-        _userAgent = userAgent;
-        _prevUserAgent = prevUserAgent;
         _browserOptions = browserOptions;
         self.webViewUIDelegate = [[CDVThemeableBrowserUIDelegate alloc] initWithTitle:[[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleDisplayName"]];
         [self.webViewUIDelegate setViewController:self];
@@ -1310,7 +1305,6 @@ CGFloat lastReducedStatusBarHeight = 0.0;
 {
     [self.webView loadHTMLString:nil baseURL:nil];
     self.webView.UIDelegate = nil;
-    [CDVUserAgentUtil releaseLock:&_userAgentLockToken];
     [super viewDidUnload];
 }
 
@@ -1343,7 +1337,6 @@ CGFloat lastReducedStatusBarHeight = 0.0;
 {
     [self emitEventForButton:_browserOptions.closeButton];
     
-    [CDVUserAgentUtil releaseLock:&_userAgentLockToken];
     self.currentURL = nil;
     self.webView.UIDelegate = nil;
     CDVThemeableBrowser* navigationDelegate = self.navigationDelegate;
@@ -1376,15 +1369,7 @@ CGFloat lastReducedStatusBarHeight = 0.0;
 {
     NSURLRequest* request = [NSURLRequest requestWithURL:url];
     
-    if (_userAgentLockToken != 0) {
-        [self.webView loadRequest:request];
-    } else {
-        [CDVUserAgentUtil acquireLock:^(NSInteger lockToken) {
-            _userAgentLockToken = lockToken;
-            [CDVUserAgentUtil setUserAgent:_userAgent lockToken:lockToken];
-            [self.webView loadRequest:request];
-        }];
-    }
+    [self.webView loadRequest:request];
 }
 
 - (void)goBack:(id)sender
@@ -1728,9 +1713,7 @@ CGFloat lastReducedStatusBarHeight = 0.0;
     BOOL isPDF = NO;
     //TODO webview class
     //BOOL isPDF = [@"true" isEqualToString :[theWebView evaluateJavaScript:@"document.body==null"]];
-    if (isPDF) {
-        [CDVUserAgentUtil setUserAgent:_prevUserAgent lockToken:_userAgentLockToken];
-    }
+   
     
     [self.navigationDelegate didFinishNavigation:theWebView];
 }
@@ -1806,7 +1789,7 @@ CGFloat lastReducedStatusBarHeight = 0.0;
     return YES;
 }
 
-- (NSUInteger)supportedInterfaceOrientations
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations
 {
     if ((self.orientationDelegate != nil) && [self.orientationDelegate respondsToSelector:@selector(supportedInterfaceOrientations)]) {
         return [self.orientationDelegate supportedInterfaceOrientations];
@@ -1815,14 +1798,6 @@ CGFloat lastReducedStatusBarHeight = 0.0;
     return 1 << UIInterfaceOrientationPortrait;
 }
 
-- (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
-{
-    if ((self.orientationDelegate != nil) && [self.orientationDelegate respondsToSelector:@selector(shouldAutorotateToInterfaceOrientation:)]) {
-        return [self.orientationDelegate shouldAutorotateToInterfaceOrientation:interfaceOrientation];
-    }
-    
-    return YES;
-}
 
 + (UIColor *)colorFromRGBA:(NSString *)rgba {
     unsigned rgbaVal = 0;
@@ -1904,22 +1879,13 @@ CGFloat lastReducedStatusBarHeight = 0.0;
     return YES;
 }
 
-- (NSUInteger)supportedInterfaceOrientations
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations
 {
     if ((self.orientationDelegate != nil) && [self.orientationDelegate respondsToSelector:@selector(supportedInterfaceOrientations)]) {
         return [self.orientationDelegate supportedInterfaceOrientations];
     }
     
     return 1 << UIInterfaceOrientationPortrait;
-}
-
-- (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)interfaceOrientation
-{
-    if ((self.orientationDelegate != nil) && [self.orientationDelegate respondsToSelector:@selector(shouldAutorotateToInterfaceOrientation:)]) {
-        return [self.orientationDelegate shouldAutorotateToInterfaceOrientation:interfaceOrientation];
-    }
-    
-    return YES;
 }
 
 

@@ -79,14 +79,9 @@
 
 @interface CDVThemeableBrowserViewController : UIViewController <WKNavigationDelegate,WKUIDelegate,WKScriptMessageHandler, CDVScreenOrientationDelegate, UIActionSheetDelegate>{
     @private
-    NSString* _userAgent;
-    NSString* _prevUserAgent;
-    NSInteger _userAgentLockToken;
     UIStatusBarStyle _statusBarStyle;
     CGFloat _initialStatusBarHeight;
     CDVThemeableBrowserOptions *_browserOptions;
-    
-    
 }
 
 @property (nonatomic, strong) IBOutlet WKWebView* webView;
@@ -118,7 +113,7 @@
 - (void)showToolBar:(BOOL)show : (NSString*) toolbarPosition;
 - (void)setCloseButtonTitle:(NSString*)title;
 
-- (id)initWithUserAgent:(NSString*)userAgent prevUserAgent:(NSString*)prevUserAgent browserOptions: (CDVThemeableBrowserOptions*) browserOptions navigationDelete:(CDVThemeableBrowser*) navigationDelegate statusBarStyle:(UIStatusBarStyle) statusBarStyle;
+- (id)init:(CDVThemeableBrowserOptions*) browserOptions navigationDelete:(CDVThemeableBrowser*) navigationDelegate statusBarStyle:(UIStatusBarStyle) statusBarStyle;
 
 + (UIColor *)colorFromRGBA:(NSString *)rgba;
 
