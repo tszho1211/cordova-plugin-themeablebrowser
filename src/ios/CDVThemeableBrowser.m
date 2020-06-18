@@ -742,12 +742,12 @@
 @implementation CDVThemeableBrowserViewController
 
 @synthesize currentURL;
-CGFloat lastReducedStatusBarHeight = 0.0;
 
 - (id)init:(CDVThemeableBrowserOptions*) browserOptions navigationDelete:(CDVThemeableBrowser*) navigationDelegate statusBarStyle:(UIStatusBarStyle) statusBarStyle
 {
     self = [super init];
     if (self != nil) {
+        _lastReducedStatusBarHeight = 0.0;
         _browserOptions = browserOptions;
         self.webViewUIDelegate = [[CDVThemeableBrowserUIDelegate alloc] initWithTitle:[[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleDisplayName"]];
         [self.webViewUIDelegate setViewController:self];
@@ -1310,7 +1310,7 @@ CGFloat lastReducedStatusBarHeight = 0.0;
 
 - (void) viewDidDisappear:(BOOL)animated
 {
-    lastReducedStatusBarHeight = 0;
+    _lastReducedStatusBarHeight = 0;
 }
 
 - (UIStatusBarStyle)preferredStatusBarStyle
@@ -1554,14 +1554,14 @@ CGFloat lastReducedStatusBarHeight = 0.0;
     viewBounds.origin.y = statusBarOffset;
     
     // account for web view height portion that may have been reduced by a previous call to this method
-    viewBounds.size.height = viewBounds.size.height - statusBarOffset + (_browserOptions.fullscreen ? 0 : lastReducedStatusBarHeight);
-    lastReducedStatusBarHeight = statusBarOffset;
+    viewBounds.size.height = viewBounds.size.height - statusBarOffset + (_browserOptions.fullscreen ? 0 : _lastReducedStatusBarHeight);
+    _lastReducedStatusBarHeight = statusBarOffset;
     
     CGFloat initialWebViewHeight = self.view.frame.size.height;
     
     if ((_browserOptions.toolbar) && ([_browserOptions.toolbarposition isEqualToString:kThemeableBrowserToolbarBarPositionTop])) {
         // if we have to display the toolbar on top of the web view, we need to account for its height
-        CGFloat webViewOffset = [self getToolbarHeight] + (_browserOptions.fullscreen || [self isPortrait] ? _initialStatusBarHeight : 0) + (_browserOptions.fullscreen ? lastReducedStatusBarHeight : 0);
+        CGFloat webViewOffset = [self getToolbarHeight] + (_browserOptions.fullscreen || [self isPortrait] ? _initialStatusBarHeight : 0) + (_browserOptions.fullscreen ? _lastReducedStatusBarHeight : 0);
         viewBounds.origin.y = webViewOffset;
         
         CGFloat webViewHeight = initialWebViewHeight - webViewOffset;

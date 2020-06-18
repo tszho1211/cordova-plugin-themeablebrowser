@@ -82,6 +82,7 @@
     UIStatusBarStyle _statusBarStyle;
     CGFloat _initialStatusBarHeight;
     CDVThemeableBrowserOptions *_browserOptions;
+    CGFloat _lastReducedStatusBarHeight;
 }
 
 @property (nonatomic, strong) IBOutlet WKWebView* webView;
