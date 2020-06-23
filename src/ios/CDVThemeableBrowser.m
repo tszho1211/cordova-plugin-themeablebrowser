@@ -1697,6 +1697,16 @@
     self.forwardButton.enabled = theWebView.canGoForward;
     theWebView.scrollView.contentInset = UIEdgeInsetsZero;
     
+    if (self.titleLabel && _browserOptions.title
+        && !_browserOptions.title[kThemeableBrowserPropStaticText]
+        && [self getBoolFromDict:_browserOptions.title withKey:kThemeableBrowserPropShowPageTitle]) {
+        // Update title text to page title when title is shown and we are not
+        // required to show a static text.
+        [self.webView evaluateJavaScript:@"document.title" completionHandler:^(NSString* title, NSError* _Nullable error) {
+            self.titleLabel.text = title;
+        }];
+    }
+    
     [self.spinner stopAnimating];
     
     // Work around a bug where the first time a PDF is opened, all UIWebViews
