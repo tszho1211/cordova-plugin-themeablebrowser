@@ -1670,6 +1670,7 @@
     self.addressLabel.text = NSLocalizedString(@"Loading...", nil);
     self.backButton.enabled = theWebView.canGoBack;
     self.forwardButton.enabled = theWebView.canGoForward;
+	[self.spinner startAnimating];
     
     return [self.navigationDelegate didStartProvisionalNavigation:theWebView];
 }
