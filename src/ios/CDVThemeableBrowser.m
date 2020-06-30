@@ -79,26 +79,13 @@
 
 @implementation CDVThemeableBrowser
 
-#ifdef __CORDOVA_4_0_0
 - (void)pluginInitialize
 {
     _isShown = NO;
     _framesOpened = 0;
     _callbackIdPattern = nil;
 }
-#else
-- (CDVThemeableBrowser*)initWithWebView:(UIWebView*)theWebView
-{
-    self = [super initWithWebView:theWebView];
-    if (self != nil) {
-        _isShown = NO;
-        _framesOpened = 0;
-        _callbackIdPattern = nil;
-    }
-    
-    return self;
-}
-#endif
+
 
 - (void)onReset
 {
@@ -1378,7 +1365,7 @@
     
     if (self.webView.canGoBack) {
         [self.webView goBack];
-        [self updateButtonDelayed:self.webView];
+        [self updateButton:self.webView];
     } else if (_browserOptions.backButtonCanClose) {
         [self close];
     }
@@ -1389,7 +1376,7 @@
     [self emitEventForButton:_browserOptions.forwardButton];
     
     [self.webView goForward];
-    [self updateButtonDelayed:self.webView];
+    [self updateButton:self.webView];
 }
 
 - (void)goCustomButton:(id)sender
@@ -1709,21 +1696,6 @@
     }
     
     [self.spinner stopAnimating];
-    
-    // Work around a bug where the first time a PDF is opened, all UIWebViews
-    // reload their User-Agent from NSUserDefaults.
-    // This work-around makes the following assumptions:
-    // 1. The app has only a single Cordova Webview. If not, then the app should
-    //    take it upon themselves to load a PDF in the background as a part of
-    //    their start-up flow.
-    // 2. That the PDF does not require any additional network requests. We change
-    //    the user-agent here back to that of the CDVViewController, so requests
-    //    from it must pass through its white-list. This *does* break PDFs that
-    //    contain links to other remote PDF/websites.
-    // More info at https://issues.apache.org/jira/browse/CB-2225
-    BOOL isPDF = NO;
-    //TODO webview class
-    //BOOL isPDF = [@"true" isEqualToString :[theWebView evaluateJavaScript:@"document.body==null"]];
    
     
     [self.navigationDelegate didFinishNavigation:theWebView];
@@ -1762,7 +1734,7 @@
 }
 
 
-- (void)updateButton:(UIWebView*)theWebView
+- (void)updateButton:(WKWebView*)theWebView
 {
     if (self.backButton) {
         self.backButton.enabled = _browserOptions.backButtonCanClose || theWebView.canGoBack;
@@ -1773,22 +1745,6 @@
     }
 }
 
-/**
- * The reason why this method exists at all is because UIWebView is quite
- * terrible with dealing this hash change, which IS a history change. However
- * when moving to a new hash, only shouldStartLoadWithRequest will be called.
- * Even then it's being called too early such that canGoback and canGoForward
- * hasn't been updated yet. What makes it worse is that when navigating history
- * involving hash by goBack and goForward, no callback is called at all, so we
- * will have to depend on the back and forward button to give us hints when to
- * change button states.
- */
-- (void)updateButtonDelayed:(UIWebView*)theWebView
-{
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-        [self updateButton:theWebView];
-    });
-}
 
 #pragma mark CDVScreenOrientationDelegate
 
