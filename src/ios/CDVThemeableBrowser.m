@@ -1572,7 +1572,13 @@
         }else{
             leftOffset = self.toolbarPaddingX;
         }
-        self.titleLabel.frame = CGRectMake(leftOffset, toolbarTopSafeAreaOffset, width, toolbarHeight);
+        
+        CGFloat toolbarHeight = self.toolbar.frame.size.height;
+        CGFloat toolbarPadding = _browserOptions.fullscreen ? [self getStatusBarHeight] : 0.0;
+        CGSize size = self.titleLabel.frame.size;
+        CGFloat yOffset = floorf((toolbarHeight + (toolbarPadding/2) - size.height) / 2);
+        
+        self.titleLabel.frame = CGRectMake(leftOffset, yOffset, width, toolbarHeight);
     }
     
     [self layoutButtons];
