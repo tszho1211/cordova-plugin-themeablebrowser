@@ -49,6 +49,8 @@
         <source-file src="src/android/ThemeableBrowserDialog.java" target-dir="src/com/initialxy/cordova/themeablebrowser" />
         <source-file src="src/android/InAppChromeClient.java" target-dir="src/com/initialxy/cordova/themeablebrowser" />
         <source-file src="src/android/ThemeableBrowserUnmarshaller.java" target-dir="src/com/initialxy/cordova/themeablebrowser" />
+        <source-file src="src/android/Whitelist.java" target-dir="src/com/initialxy/cordova/themeablebrowser" />
+        <source-file src="src/android/WhitelistPlugin.java" target-dir="src/com/initialxy/cordova/themeablebrowser" />
     </platform>
 
     <!-- ios -->
