@@ -1636,21 +1636,28 @@
 
 - (void)emitEventForButton:(NSDictionary*)buttonProps withIndex:(NSNumber*)index
 {
-    if (buttonProps) {
-        NSString* event = buttonProps[kThemeableBrowserPropEvent];
-        if (event) {
-            NSMutableDictionary* dict = [NSMutableDictionary new];
-            [dict setObject:event forKey:@"type"];
-            [dict setObject:[self.navigationDelegate.themeableBrowserViewController.currentURL absoluteString] forKey:@"url"];
+    @try {
+        if (buttonProps) {
+            NSString* event = buttonProps[kThemeableBrowserPropEvent];
+            if (event) {
+                NSMutableDictionary* dict = [NSMutableDictionary new];
+                [dict setObject:event forKey:@"type"];
+                NSString* url = [self.navigationDelegate.themeableBrowserViewController.currentURL absoluteString];
+                if(url != nil){
+                    [dict setObject:url forKey:@"url"];
+                }
             
-            if (index) {
-                [dict setObject:index forKey:@"index"];
+                if (index) {
+                    [dict setObject:index forKey:@"index"];
+                }
+                [self.navigationDelegate emitEvent:dict];
+            } else {
+                [self.navigationDelegate emitWarning:kThemeableBrowserEmitCodeUndefined
+                                         withMessage:@"Button clicked, but event property undefined. No event will be raised."];
             }
-            [self.navigationDelegate emitEvent:dict];
-        } else {
-            [self.navigationDelegate emitWarning:kThemeableBrowserEmitCodeUndefined
-                                     withMessage:@"Button clicked, but event property undefined. No event will be raised."];
         }
+    }@catch (NSException *exception) {
+        NSLog(@"EXCEPTION on emitEventForButton: %@", exception.reason);
     }
 }
 
