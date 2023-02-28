@@ -52,11 +52,14 @@ import android.view.WindowManager;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputMethodManager;
 import android.webkit.CookieManager;
+import android.webkit.DownloadListener;
 import android.webkit.JavascriptInterface;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
+import android.webkit.WebResourceRequest;
+import android.webkit.WebResourceError;
 import android.webkit.WebViewClient;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
@@ -114,6 +117,7 @@ public class ThemeableBrowser extends CordovaPlugin {
     private static final String WRN_UNDEFINED = "undefined";
 
     private ThemeableBrowserDialog dialog;
+    private ThemeableBrowserDownloads downloads;
     private WebView inAppWebView;
     private EditText edittext;
     private CallbackContext callbackContext;
@@ -1100,10 +1104,26 @@ public class ThemeableBrowser extends CordovaPlugin {
                 if(features.hidden) {
                     dialog.hide();
                 }
+
+                if (ThemeableBrowser.this.downloads == null) {
+                    ThemeableBrowser.this.downloads = new ThemeableBrowserDownloads(ThemeableBrowser.this);
+                }
+
+                inAppWebView.setDownloadListener(
+                        ThemeableBrowser.this.downloads
+                );
             }
         };
         this.cordova.getActivity().runOnUiThread(runnable);
         return "";
+    }
+
+    public void onRequestPermissionResult(
+        int requestCode, String[] permissions, int[] grantResults
+    ) throws JSONException {
+        if (ThemeableBrowser.this.downloads != null) {
+            ThemeableBrowser.this.downloads.onRequestPermissionResult(requestCode, permissions, grantResults);
+        }
     }
 
     /**
@@ -1400,10 +1420,11 @@ public class ThemeableBrowser extends CordovaPlugin {
          * This handles a small subset of all the URIs that would be encountered.
          *
          * @param webView
-         * @param url
+         * @param request
          */
         @Override
-        public boolean shouldOverrideUrlLoading(WebView webView, String url) {
+        public boolean shouldOverrideUrlLoading(WebView webView, WebResourceRequest request) {
+            String url = request.getUrl().toString();
             if (url.startsWith(WebView.SCHEME_TEL)) {
                 try {
                     Intent intent = new Intent(Intent.ACTION_DIAL);
@@ -1522,15 +1543,15 @@ public class ThemeableBrowser extends CordovaPlugin {
             }
         }
 
-        public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
-            super.onReceivedError(view, errorCode, description, failingUrl);
+        public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
+            super.onReceivedError (view, request, error);
 
             try {
                 JSONObject obj = new JSONObject();
                 obj.put("type", LOAD_ERROR_EVENT);
-                obj.put("url", failingUrl);
-                obj.put("code", errorCode);
-                obj.put("message", description);
+                obj.put("url", request.getUrl());
+                obj.put("code", error.getErrorCode());
+                obj.put("message", error.getDescription());
 
                 sendUpdate(obj, true, PluginResult.Status.ERROR);
             } catch (JSONException ex) {
@@ -1542,7 +1563,7 @@ public class ThemeableBrowser extends CordovaPlugin {
      * Like Spinner but will always trigger onItemSelected even if a selected
      * item is selected, and always ignore default selection.
      */
-    public class MenuSpinner extends Spinner {
+    public class MenuSpinner extends androidx.appcompat.widget.AppCompatSpinner {
         private OnItemSelectedListener listener;
 
         public MenuSpinner(Context context) {
