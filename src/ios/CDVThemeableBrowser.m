@@ -46,6 +46,9 @@
 #define    kThemeableBrowserPropWwwImagePressed @"wwwImagePressed"
 #define    kThemeableBrowserPropWwwImageDensity @"wwwImageDensity"
 #define    kThemeableBrowserPropStaticText @"staticText"
+#define    kThemeableBrowserPropShowProgress @"showProgress"
+#define    kThemeableBrowserPropProgressBgColor @"progressBgColor"
+#define    kThemeableBrowserPropProgressColor @"progressColor"
 #define    kThemeableBrowserPropShowPageTitle @"showPageTitle"
 #define    kThemeableBrowserPropAlign @"align"
 #define    kThemeableBrowserPropTitle @"title"
@@ -1015,8 +1018,46 @@
     
     self.view.backgroundColor = [CDVThemeableBrowserViewController colorFromRGBA:[self getStringFromDict:_browserOptions.statusbar withKey:kThemeableBrowserPropColor withDefault:@"#ffffffff"]];
     [self.view addSubview:self.toolbar];
+    self.progressView=[[UIProgressView   alloc] initWithFrame:CGRectMake(0.0, toolbarY+toolbarOffsetHeight+[self getStatusBarOffset], self.view.bounds.size.width, 20.0)];
+    self.progressView.autoresizingMask = UIViewAutoresizingFlexibleWidth|UIViewAutoresizingFlexibleHeight;
+    self.progressView.progressViewStyle=UIProgressViewStyleDefault;
+    self.progressView.progressTintColor=[CDVThemeableBrowserViewController colorFromRGBA:[self getStringFromDict:_browserOptions.browserProgress withKey: kThemeableBrowserPropProgressColor withDefault:@"#0000FF"]];
+    self.progressView.trackTintColor=[CDVThemeableBrowserViewController colorFromRGBA:[self getStringFromDict:_browserOptions.browserProgress withKey:kThemeableBrowserPropProgressBgColor withDefault:@"#808080"]];
+    if ([self getBoolFromDict:_browserOptions.browserProgress withKey:kThemeableBrowserPropShowProgress]) {
+        UISwipeGestureRecognizer *swipeRight = [[UISwipeGestureRecognizer alloc] initWithTarget:self action:@selector(handleSwipe:)];
+        [swipeRight setDirection:UISwipeGestureRecognizerDirectionRight];
+        [self.view addGestureRecognizer:swipeRight];
+        [self.view addSubview:self.progressView];
+        [self.webView addObserver:self forKeyPath:@"estimatedProgress" options:NSKeyValueObservingOptionNew context:nil];
+    }
     // [self.view addSubview:self.addressLabel];
     // [self.view addSubview:self.spinner];
+}
+
+- (void)handleSwipe:(UISwipeGestureRecognizer *)swipe {
+    // If there is no back history and backButtonCanClose is enabled, close the browser.
+    if (swipe.direction == UISwipeGestureRecognizerDirectionRight && !self.webView.canGoBack && _browserOptions.backButtonCanClose) {
+        [self close];
+    }
+}
+
+- (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context
+{
+    if ([keyPath isEqualToString:@"estimatedProgress"]) {
+        // Update progress bar when estimatedProgress changes
+         self.progressView.alpha = 1.0;
+        [self.progressView setProgress:self.webView.estimatedProgress animated:YES];
+        if(self.webView.estimatedProgress >= 1.0f) {
+            [UIView animateWithDuration:0.3 delay:0.3 options:UIViewAnimationOptionCurveEaseOut animations:^{
+              [self.progressView setAlpha:0.0f];
+            } completion:^(BOOL finished) {
+              [self.progressView setProgress:0.0f animated:NO];
+            }];
+         }
+    } else {
+        [super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
+    }
+
 }
 
 /**
@@ -1323,6 +1364,10 @@
 - (void)close
 {
     [self emitEventForButton:_browserOptions.closeButton];
+    
+    if ([self getBoolFromDict:_browserOptions.browserProgress withKey:kThemeableBrowserPropShowProgress]) {
+        [self.webView removeObserver:self forKeyPath:@"estimatedProgress"];
+    }
     
     self.currentURL = nil;
     self.webView.UIDelegate = nil;

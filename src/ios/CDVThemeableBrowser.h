@@ -44,6 +44,7 @@
 @property (nonatomic) NSDictionary* statusbar;
 @property (nonatomic) NSDictionary* toolbar;
 @property (nonatomic) NSDictionary* title;
+@property (nonatomic) NSDictionary* browserProgress;
 @property (nonatomic) NSDictionary* backButton;
 @property (nonatomic) NSDictionary* forwardButton;
 @property (nonatomic) NSDictionary* closeButton;
@@ -95,6 +96,7 @@
 @property (nonatomic, strong) IBOutlet UIButton* menuButton;
 @property (nonatomic, strong) IBOutlet UIActivityIndicatorView* spinner;
 @property (nonatomic, strong) IBOutlet UIView* toolbar;
+@property (nonatomic, strong) IBOutlet UIProgressView* progressView;
 @property (nonatomic, strong) IBOutlet CDVThemeableBrowserUIDelegate* webViewUIDelegate;
 
 @property (nonatomic, strong) NSArray* leftButtons;
@@ -106,6 +108,7 @@
 @property (nonatomic) CGFloat titleOffsetLeft;
 @property (nonatomic) CGFloat titleOffsetRight;
 @property (nonatomic) CGFloat toolbarPaddingX;
+@property (nonatomic , readonly , getter=loadProgress) CGFloat currentProgress;
 
 - (void)close;
 - (void)reload;
