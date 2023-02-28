@@ -53,6 +53,7 @@
 @property (nonatomic) BOOL backButtonCanClose;
 @property (nonatomic) BOOL disableAnimation;
 @property (nonatomic) BOOL fullscreen;
+@property (nonatomic) NSString* customUserAgent;
 
 @end
 
@@ -83,6 +84,7 @@
     UIStatusBarStyle _statusBarStyle;
     CGFloat _initialStatusBarHeight;
     CDVThemeableBrowserOptions *_browserOptions;
+    NSDictionary *_settings;
     CGFloat _lastReducedStatusBarHeight;
 }
 
@@ -117,7 +119,7 @@
 - (void)showToolBar:(BOOL)show : (NSString*) toolbarPosition;
 - (void)setCloseButtonTitle:(NSString*)title;
 
-- (id)init:(CDVThemeableBrowserOptions*) browserOptions navigationDelete:(CDVThemeableBrowser*) navigationDelegate statusBarStyle:(UIStatusBarStyle) statusBarStyle;
+- (id)init:(CDVThemeableBrowserOptions*) browserOptions navigationDelete:(CDVThemeableBrowser*) navigationDelegate statusBarStyle:(UIStatusBarStyle) statusBarStyle settings:(NSDictionary*) settings;
 
 + (UIColor *)colorFromRGBA:(NSString *)rgba;
 

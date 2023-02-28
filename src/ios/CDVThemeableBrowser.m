@@ -292,7 +292,8 @@
         self.themeableBrowserViewController = [[CDVThemeableBrowserViewController alloc]
                                                init: browserOptions
                                                navigationDelete:self
-                                               statusBarStyle:statusBarStyle];
+                                               statusBarStyle:statusBarStyle
+                                               settings:self.commandDelegate.settings];
         self.themeableBrowserViewController.navigationDelegate = self;
         
         if ([self.viewController conformsToProtocol:@protocol(CDVScreenOrientationDelegate)]) {
@@ -734,11 +735,13 @@
 @synthesize currentURL;
 
 - (id)init:(CDVThemeableBrowserOptions*) browserOptions navigationDelete:(CDVThemeableBrowser*) navigationDelegate statusBarStyle:(UIStatusBarStyle) statusBarStyle
+    settings:(NSDictionary*) settings
 {
     self = [super init];
     if (self != nil) {
         _lastReducedStatusBarHeight = 0.0;
         _browserOptions = browserOptions;
+        _settings = settings;
         self.webViewUIDelegate = [[CDVThemeableBrowserUIDelegate alloc] initWithTitle:[[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleDisplayName"]];
         [self.webViewUIDelegate setViewController:self];
         _navigationDelegate = navigationDelegate;
@@ -762,6 +765,15 @@
     WKUserContentController* userContentController = [[WKUserContentController alloc] init];
     
     WKWebViewConfiguration* configuration = [[WKWebViewConfiguration alloc] init];
+    NSString *userAgent = configuration.applicationNameForUserAgent;
+    if (
+        [self settingForKey:@"OverrideUserAgent"] == nil &&
+        _browserOptions.customUserAgent == nil &&
+        [self settingForKey:@"AppendUserAgent"] != nil
+        ) {
+        userAgent = [NSString stringWithFormat:@"%@ %@", userAgent, [self settingForKey:@"AppendUserAgent"]];
+    }
+    configuration.applicationNameForUserAgent = userAgent;
     configuration.userContentController = userContentController;
 #if __has_include("CDVWKProcessPoolFactory.h")
     configuration.processPool = [[CDVWKProcessPoolFactory sharedFactory] sharedProcessPool];
@@ -790,6 +802,12 @@
     self.webView.navigationDelegate = self;
     self.webView.UIDelegate = self.webViewUIDelegate;
     self.webView.backgroundColor = [UIColor whiteColor];
+    NSString* overrideUserAgent = [self settingForKey:@"OverrideUserAgent"];
+    if (_browserOptions.customUserAgent) {
+        self.webView.customUserAgent = _browserOptions.customUserAgent;
+    } else if (overrideUserAgent) {
+        self.webView.customUserAgent = overrideUserAgent;
+    }
     
     self.webView.clearsContextBeforeDrawing = YES;
     self.webView.clipsToBounds = YES;
@@ -1032,6 +1050,11 @@
     }
     // [self.view addSubview:self.addressLabel];
     // [self.view addSubview:self.spinner];
+}
+
+- (id)settingForKey:(NSString*)key
+{
+    return [_settings objectForKey:[key lowercaseString]];
 }
 
 - (void)handleSwipe:(UISwipeGestureRecognizer *)swipe {
