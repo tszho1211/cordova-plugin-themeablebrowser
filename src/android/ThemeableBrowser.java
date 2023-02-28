@@ -387,6 +387,7 @@ public class ThemeableBrowser extends CordovaPlugin {
             this.cordova.getActivity().startActivity(intent);
             return "";
         } catch (android.content.ActivityNotFoundException e) {
+            emitLog( LOAD_ERROR_EVENT, EVT_ERR, String.format("Error loading %s: %s", url, e.toString()));
             Log.d(LOG_TAG, "ThemeableBrowser: Error loading url "+url+":"+ e.toString());
             return e.toString();
         }
@@ -883,6 +884,19 @@ public class ThemeableBrowser extends CordovaPlugin {
                 settings.setBuiltInZoomControls(features.zoom);
                 settings.setDisplayZoomControls(false);
                 settings.setPluginState(android.webkit.WebSettings.PluginState.ON);
+
+                String overrideUserAgent = preferences.getString("OverrideUserAgent", null);
+                
+                if (features.customUserAgent != null) {
+                    settings.setUserAgentString(features.customUserAgent);
+                } else if (overrideUserAgent != null) {
+                    settings.setUserAgentString(overrideUserAgent);
+                } else {
+                    String appendUserAgent = preferences.getString("AppendUserAgent", null);
+                    if (appendUserAgent != null) {
+                        settings.setUserAgentString(settings.getUserAgentString() + appendUserAgent);
+                    }
+                }
 
                 // Add JS interface
                 class JsObject {
@@ -1483,7 +1497,11 @@ public class ThemeableBrowser extends CordovaPlugin {
 
         public void onPageFinished(WebView view, String url) {
             super.onPageFinished(view, url);
-
+            //candidoalbertosilva
+            // https://issues.apache.org/jira/browse/CB-11248
+            view.clearFocus();
+            view.requestFocus();
+            
             // Alias the iOS webkit namespace for postMessage()
             if (Build.VERSION.SDK_INT >= 17){
                 injectDeferredObject("window.webkit={messageHandlers:{cordova_iab:cordova_iab}}", null);
@@ -1564,6 +1582,22 @@ public class ThemeableBrowser extends CordovaPlugin {
         }
     }
 
+    /**
+     * Called when the system is about to start resuming a previous activity.
+     */
+    @Override
+    public void onPause(boolean multitasking) {
+        if(inAppWebView != null) inAppWebView.onPause();
+    }
+
+    /**
+     * Called when the activity will start interacting with the user.
+     */
+    @Override
+    public void onResume(boolean multitasking) {
+        if(inAppWebView != null) inAppWebView.onResume();
+    }
+
 
     /**
      * A class to hold parsed option properties.
@@ -1587,6 +1621,7 @@ public class ThemeableBrowser extends CordovaPlugin {
         public boolean disableAnimation;
         public boolean fullscreen;
         public BrowserProgress browserProgress;
+        public String customUserAgent;
     }
 
     private static class Event {
